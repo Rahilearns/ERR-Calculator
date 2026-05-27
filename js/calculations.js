@@ -95,8 +95,11 @@ export function buildStructuredSchedule(p) {
   // Regular installments
   if (regularPeriods <= 0) return { rows, accruedReceivable };
 
+  // Compute the "base" regular installment without accrued-receivable add-on (used as the EMI/installment-size for security calc)
+  let baseInstallment = 0;
   if (paymentMode === 'EMI' || paymentMode === 'EQI') {
     const pmt = PMT(ratePerPeriod, regularPeriods, -urpa);
+    baseInstallment = pmt;
     let paymentCounter = 0;
     for (let m = moratoriumMonths + 1; m <= tenorMonths; m++) {
       let installment = 0, interest = 0, principal = 0;
@@ -112,7 +115,6 @@ export function buildStructuredSchedule(p) {
         } else {
           principal = installment - interest;
         }
-        // Add any accrued receivable from moratorium to FIRST installment
         if (paymentCounter === 0 && accruedReceivable > 0) {
           installment += accruedReceivable;
           accruedReceivable = 0;
@@ -123,12 +125,16 @@ export function buildStructuredSchedule(p) {
       rows.push({
         sl: m, installment, interest, principal, urpa,
         interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
+        paymentType: paymentMode, isPaymentMonth,
       });
     }
   } else {
     // Equal Principal + Interest
     const principalPer = urpa / regularPeriods;
     let paymentCounter = 0;
+    // Base installment for security size = principal-per + interest on initial URPA at first payment
+    const firstInterest = urpa * ratePerPeriod;
+    baseInstallment = principalPer + firstInterest;
     for (let m = moratoriumMonths + 1; m <= tenorMonths; m++) {
       let installment = 0, interest = 0, principal = 0;
       const monthsSinceMora = m - moratoriumMonths;
@@ -152,10 +158,11 @@ export function buildStructuredSchedule(p) {
       rows.push({
         sl: m, installment, interest, principal, urpa,
         interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
+        paymentType: paymentMode, isPaymentMonth,
       });
     }
   }
-  return { rows, accruedReceivable };
+  return { rows, accruedReceivable, baseInstallment };
 }
 
 // Customized Loan
@@ -196,6 +203,9 @@ export function buildCustomizedSchedule(p) {
   // E.g. if moratorium=6 and tenor=36, layers have from=7, to=36
   const sorted = layers.slice().sort((a, b) => (a.fromInstallment ?? 0) - (b.fromInstallment ?? 0));
 
+  // Track per-layer base installment for security-size lookup
+  const layerInstallments = {}; // { 'EMI': base_pmt, 'EQI': base_pmt, ... }
+
   for (let li = 0; li < sorted.length; li++) {
     const L = sorted[li];
     const from = L.fromInstallment;
@@ -208,8 +218,20 @@ export function buildCustomizedSchedule(p) {
     if (L.paymentType === 'EMI' || L.paymentType === 'Equal Principal + Interest (Monthly)') ppy = 12;
     else if (L.paymentType === 'EQI' || L.paymentType === 'Equal Principal + Interest (Quarterly)') ppy = 4;
 
-    if (L.paymentType === 'EMI') pmt = PMT(ratePerYear / 12, count, -urpa);
-    else if (L.paymentType === 'EQI') pmt = PMT(ratePerYear / 4, Math.ceil(count / 3), -urpa);
+    if (L.paymentType === 'EMI') {
+      pmt = PMT(ratePerYear / 12, count, -urpa);
+      if (!layerInstallments['EMI']) layerInstallments['EMI'] = pmt;
+    } else if (L.paymentType === 'EQI') {
+      pmt = PMT(ratePerYear / 4, Math.ceil(count / 3), -urpa);
+      if (!layerInstallments['EQI']) layerInstallments['EQI'] = pmt;
+    } else if (L.paymentType === 'Equal Principal + Interest (Monthly)' && !layerInstallments['Installment']) {
+      layerInstallments['Installment'] = (urpa / count) + urpa * monthlyRate;
+    } else if (L.paymentType === 'Equal Principal + Interest (Quarterly)' && !layerInstallments['Installment']) {
+      const qPeriods = Math.ceil(count / 3);
+      layerInstallments['Installment'] = (urpa / qPeriods) + urpa * (ratePerYear / 4);
+    } else if (L.paymentType === 'Customized Principal' && !layerInstallments['Customized']) {
+      layerInstallments['Customized'] = (L.customPrincipal || 0) + urpa * monthlyRate;
+    }
 
     let paymentCounter = 0;
     for (let m = from; m <= to; m++) {
@@ -263,12 +285,13 @@ export function buildCustomizedSchedule(p) {
       rows.push({
         sl: m, installment, interest, principal, urpa,
         interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
+        paymentType: L.paymentType,
       });
 
       if (installment > 0) paymentCounter++;
     }
   }
-  return { rows, accruedReceivable };
+  return { rows, accruedReceivable, layerInstallments };
 }
 
 // ============================================================
@@ -282,9 +305,25 @@ export function computeMetrics(schedule, params) {
   const rows = schedule.rows;
 
   // Derive installment-equivalent security if needed
+  // For Customized: pull from the matching payment-layer's PMT (schedule.layerInstallments)
+  // For Structured: use the schedule.baseInstallment (PMT of the regular tenor)
   if (securityKind === 'EMI' || securityKind === 'EQI' || securityKind === 'Installment') {
-    const firstInst = rows.find((r, i) => i > 0 && r.installment > 0);
-    if (firstInst) securityAmount = firstInst.installment * (numInst || 1);
+    let unitInstallment = 0;
+    if (schedule.layerInstallments && schedule.layerInstallments[securityKind]) {
+      // Customized — match the user's security type to the right payment layer
+      unitInstallment = schedule.layerInstallments[securityKind];
+    } else if (schedule.baseInstallment) {
+      // Structured — use the regular (post-moratorium) PMT
+      unitInstallment = schedule.baseInstallment;
+    } else {
+      // Fallback — first post-moratorium row tagged with a matching paymentType
+      const match = rows.find((r) => r.paymentType && (
+        r.paymentType === securityKind ||
+        (securityKind === 'Installment' && r.paymentType.startsWith('Equal Principal + Interest'))
+      ));
+      if (match) unitInstallment = match.installment;
+    }
+    securityAmount = unitInstallment * (numInst || 1);
     securityRate = 0;
   }
 
@@ -319,6 +358,8 @@ export function computeMetrics(schedule, params) {
     csBenefit,
     netInterestExpense,
     tenorYears,
+    derivedSecurityAmount: securityAmount,
+    derivedSecurityRate: securityRate,
   };
 }
 

@@ -812,6 +812,14 @@ function renderResults(panel, ctx) {
   grid.appendChild(metric('Effective Rate (ERR)', formatPercent(m.effectiveRate), true));
   grid.appendChild(metric('NIM', formatPercent(m.nim)));
   grid.appendChild(metric('Net Interest Income', formatMoney(m.nii)));
+  // If model derived a security amount (EMI/EQI/Installment type), show it for transparency
+  const sk = ctx.inputs.fundedSecurityType;
+  if ((sk === 'EMI' || sk === 'EQI' || sk === 'Installment') && m.derivedSecurityAmount > 0) {
+    grid.appendChild(metric(
+      `Security Amount (${sk} × ${ctx.inputs.numInst || 1})`,
+      formatMoney(m.derivedSecurityAmount)
+    ));
+  }
   card.appendChild(grid);
 
   // Top-right actions: Download Report (left), Verify Calculation (right)

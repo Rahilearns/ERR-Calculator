@@ -174,8 +174,16 @@ export function downloadVerificationExcel(filename, ctx) {
   inputAoA.push(['Inputs', 'Values']);
 
   // Map inputs by page type (mirror sample format for Structured)
+  // Pass derived security amount so EMI/EQI/Installment-based security shows the actual computed value.
+  const inputsForExport = {
+    ...inputs,
+    _derived: {
+      derivedSecurityAmount: metrics.derivedSecurityAmount,
+      derivedSecurityRate: metrics.derivedSecurityRate,
+    },
+  };
   const inputRowsStart = 5;
-  const inputLines = collectInputLinesFor(pageType, inputs);
+  const inputLines = collectInputLinesFor(pageType, inputsForExport);
   inputLines.forEach(([label, value]) => inputAoA.push([label, value]));
   // Tenor years derived row (always present)
   const tenorYearsRow = inputAoA.length + 1; // 1-indexed
@@ -252,6 +260,12 @@ export function downloadVerificationExcel(filename, ctx) {
   XLSX.writeFile(wb, filename);
 }
 
+// If security type is installment-based, the input csAmount is empty —
+// substitute the model's derived amount stored on metrics (passed as `inp._derived`).
+function securityAmtFor(inp, key) {
+  return inp._derived && inp._derived[key] !== undefined ? inp._derived[key] : null;
+}
+
 // Build list of [label, value] for the Inputs section based on page type
 function collectInputLinesFor(pageType, inp) {
   const yesNo = (v) => (v === 'Yes' || v === true ? 'Yes' : 'No');
@@ -265,7 +279,8 @@ function collectInputLinesFor(pageType, inp) {
       ['Payment Mode', inp.paymentMode ?? ''],
       ['Total COF (COF/ISC + OPEX)', inp.totalCof ?? 0],
       ['Funded Security Type', inp.fundedSecurityType ?? ''],
-      ['Cash Security / FDR Amount', inp.csAmount ?? 0],
+      ['Number of Installments (security)', inp.numInst ?? 0],
+      ['Cash Security / FDR Amount', securityAmtFor(inp, 'derivedSecurityAmount') ?? (inp.csAmount ?? 0)],
       ['Cash Security / FDR Rate', inp.csRate ?? 0],
     ];
   }
@@ -279,7 +294,8 @@ function collectInputLinesFor(pageType, inp) {
       ['Payment Layers', (inp.paymentLayers || []).length + ' layer(s)'],
       ['Total COF (COF/ISC + OPEX)', inp.totalCof ?? 0],
       ['Funded Security Type', inp.fundedSecurityType ?? ''],
-      ['Cash Security / FDR Amount', inp.csAmount ?? 0],
+      ['Number of Installments (security)', inp.numInst ?? 0],
+      ['Cash Security / FDR Amount', securityAmtFor(inp, 'derivedSecurityAmount') ?? (inp.csAmount ?? 0)],
       ['Cash Security / FDR Rate', inp.csRate ?? 0],
     ];
   }
