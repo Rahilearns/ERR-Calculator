@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERR Calculator</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand" id="brand-home">
+      <span class="brand-mark">ERR</span>
+      <span class="brand-text">Calculator</span>
+    </div>
+    <nav class="header-actions">
+      <button id="compare-btn" class="ghost-btn hidden" title="Compare saved summaries">
+        <span class="badge" id="saved-count">0</span> Compare
+      </button>
+      <button id="theme-toggle" class="ghost-btn" title="Toggle dark/light">
+        <span id="theme-icon">&#9788;</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Tab navigation -->
+  <nav class="tab-nav" id="tab-nav">
+    <button class="tab-btn" data-tab="regular">Loan Facilities — Structured</button>
+    <button class="tab-btn" data-tab="customized">Loan Facilities — Customized</button>
+    <button class="tab-btn" data-tab="revisionStructured">Rate Revision — Structured</button>
+    <button class="tab-btn" data-tab="revisionCustomized">Rate Revision — Customized</button>
+  </nav>
+
+  <main id="app-root"></main>
+
+  <div id="modal-root" class="modal-root hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <div id="toast-root" class="toast-root"></div>
+
+  <footer class="app-footer">
+    <span>Effective Rate of Return Calculator &middot; for Relationship Managers</span>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
