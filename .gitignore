@@ -1,0 +1,15 @@
+# Working / reference files (not part of the deployed site)
+*.xlsx
+*.pdf
+*.docx
+~$*
+Prompts.*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code config
+.claude/
