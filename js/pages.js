@@ -201,13 +201,13 @@ export function renderCustomizedLoan(root) {
   const offeredRate = percentField({ label: 'Offered Rate', name: 'offeredRate' });
   const moratoriumAvail = optionField({ label: 'Moratorium Available?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No', onChange: refresh });
   const moratoriumPeriod = numberField({ label: 'Moratorium Period (Months)', name: 'moratoriumPeriod', integerOnly: true, min: 1 });
-  moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); });
+  moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); paymentLayers.applyLayerRules(); });
   const idpField = monthBoxesField({
     name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
     getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
   });
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
-  loanTenor.input.addEventListener('input', () => { refreshLayerOpts(); refresh(); });
+  loanTenor.input.addEventListener('input', () => { refreshLayerOpts(); refresh(); paymentLayers.applyLayerRules(); });
 
   function fromOptions() {
     const tenor = loanTenor.getValue() || 0;
@@ -238,7 +238,19 @@ export function renderCustomizedLoan(root) {
       { key: 'customPrincipal', label: 'Custom Principal', type: 'number', width: '1.2fr' },
     ],
     addLabel: '+ Add Payment Layer',
-    initialRows: 0,
+    minRows: 2,
+    initialRows: 2,
+    cascadingFromKey: 'fromInstallment',
+    cascadingToKey: 'toInstallment',
+    getMaturity: () => {
+      const tenor = loanTenor.getValue();
+      return { value: tenor ? String(tenor) : null, kind: 'month' };
+    },
+    getAnchor: () => {
+      const mora = moratoriumAvail.getValue() === 'Yes' ? (moratoriumPeriod.getValue() || 0) : 0;
+      return { value: String(mora + 1), kind: 'month' };
+    },
+    allowFromEqualTo: true,
     onChange: () => {
       paymentLayers.rows.forEach((row) => {
         const ptype = row.inputs.paymentType.value;
@@ -445,7 +457,6 @@ export function renderRateRevisionStructured(root) {
     options: ['EMI', 'EQI', 'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)'], value: 'EMI',
   });
   const tenorMonths = numberField({ label: 'Loan Tenor at Disbursement (Months)', name: 'tenorMonths', integerOnly: true, min: 1 });
-  tenorMonths.input.addEventListener('input', syncRateLayerDates);
 
   function maturityISO() {
     const d = disbursementDate.getValue();
@@ -454,73 +465,6 @@ export function renderRateRevisionStructured(root) {
     const dt = new Date(d);
     dt.setMonth(dt.getMonth() + t);
     return dt.toISOString().slice(0, 10);
-  }
-  function addDays(iso, days) {
-    const d = new Date(iso);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
-  }
-  function setDateInput(input, iso) {
-    if (!iso) return;
-    if (input._flatpickr) input._flatpickr.setDate(iso, false);
-    else input.value = formatDDMMMYYYY(new Date(iso));
-  }
-  function getDateInput(input) {
-    if (input._flatpickr) {
-      const d = input._flatpickr.selectedDates[0];
-      return d ? d.toISOString().slice(0, 10) : null;
-    }
-    const d = parseDDMMMYYYY(input.value);
-    return d ? d.toISOString().slice(0, 10) : null;
-  }
-
-  function syncRateLayerDates() {
-    const disb = disbursementDate.getValue();
-    const mat = maturityISO();
-    if (!rateLayers) return;
-    rateLayers.rows.forEach((row, idx) => {
-      const fromInput = row.inputs.fromDate;
-      const toInput = row.inputs.toDate;
-      if (idx === 0 && disb && !fromInput.dataset.userSet) setDateInput(fromInput, disb);
-      else if (idx > 0 && !fromInput.dataset.userSet) {
-        const prevTo = getDateInput(rateLayers.rows[idx - 1].inputs.toDate);
-        if (prevTo) setDateInput(fromInput, addDays(prevTo, 1));
-      }
-      const isLast = idx === rateLayers.rows.length - 1;
-      if (isLast && mat && !toInput.dataset.userSet) setDateInput(toInput, mat);
-    });
-    syncSecurityLayerDates();
-  }
-  function syncSecurityLayerDates() {
-    if (!securityLayers || !securityLayers.rows.length) return;
-    const firstRateFrom = rateLayers.rows[0]?.inputs.fromDate;
-    const firstRateFromIso = firstRateFrom ? getDateInput(firstRateFrom) : null;
-    const mat = maturityISO();
-    securityLayers.rows.forEach((row, idx) => {
-      const fromInput = row.inputs.fromDate;
-      const toInput = row.inputs.toDate;
-      if (idx === 0 && firstRateFromIso && !fromInput.dataset.userSet) setDateInput(fromInput, firstRateFromIso);
-      else if (idx > 0 && !fromInput.dataset.userSet) {
-        const prevTo = getDateInput(securityLayers.rows[idx - 1].inputs.toDate);
-        if (prevTo) setDateInput(fromInput, addDays(prevTo, 1));
-      }
-      const isLast = idx === securityLayers.rows.length - 1;
-      if (isLast && mat && !toInput.dataset.userSet) setDateInput(toInput, mat);
-    });
-  }
-  function attachUserSetMarkers() {
-    [rateLayers, securityLayers].forEach((field) => {
-      if (!field) return;
-      field.rows.forEach(row => {
-        ['fromDate', 'toDate'].forEach(k => {
-          const inp = row.inputs[k];
-          if (inp && !inp._marker) {
-            inp._marker = true;
-            inp.addEventListener('change', () => { inp.dataset.userSet = '1'; });
-          }
-        });
-      });
-    });
   }
 
   const rateLayers = layeredField({
@@ -536,8 +480,8 @@ export function renderRateRevisionStructured(root) {
     initialRows: 2,
     cascadingFromKey: 'fromDate',
     cascadingToKey: 'toDate',
+    getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
     getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
-    onChange: () => { attachUserSetMarkers(); syncRateLayerDates(); },
   });
 
   const securityLayers = layeredField({
@@ -550,11 +494,21 @@ export function renderRateRevisionStructured(root) {
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     addLabel: '+ Add Security Layer',
-    initialRows: 0,
-    onChange: () => { attachUserSetMarkers(); syncSecurityLayerDates(); },
+    minRows: 2,
+    initialRows: 2,
+    cascadingFromKey: 'fromDate',
+    cascadingToKey: 'toDate',
+    getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
+    getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
   });
 
-  setTimeout(() => { attachUserSetMarkers(); syncRateLayerDates(); }, 100);
+  // External inputs (disbursement / tenor) feed the cascade engine — re-run on change
+  function rerunLayerRules() {
+    rateLayers.applyLayerRules();
+    securityLayers.applyLayerRules();
+  }
+  disbursementDate.input.addEventListener('change', rerunLayerRules);
+  tenorMonths.input.addEventListener('input', rerunLayerRules);
 
   const nimComparison = optionField({ label: 'Want to show NIM margin comparison?', name: 'nimComparison', options: ['No', 'Yes'], value: 'No', onChange: refresh });
 

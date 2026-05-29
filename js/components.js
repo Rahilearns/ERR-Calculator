@@ -331,6 +331,7 @@ export function layeredField(opts) {
     minRows = 0, maxRows = Infinity,
     cascadingFromKey, cascadingToKey,
     getMaturity = null,
+    getAnchor = null, // first-row cascadingFromKey source of truth (e.g. disbursement date)
     allowFromEqualTo = true,
   } = opts;
   // Hoisted once — schema is closed-over and never changes
@@ -468,6 +469,8 @@ export function layeredField(opts) {
   // Seed initial rows + minRows (undeletable)
   const totalInitial = Math.max(initialRows, minRows);
   for (let i = 0; i < totalInitial; i++) addRow({}, { undeletable: i < minRows });
+  // Apply rules once initial rows have mounted (after rAF so flatpickr is attached)
+  requestAnimationFrame(() => applyLayerRules());
 
   // ============ Universal layer rules ============
   function getMaturityValue() {
@@ -523,6 +526,7 @@ export function layeredField(opts) {
   function applyLayerRules() {
     if (!cascadingFromKey || !cascadingToKey) return;
     const maturity = getMaturityValue();
+    const anchor = getAnchor ? (getAnchor()?.value || null) : null;
 
     rows.forEach((r, i) => {
       const fromInp = r.inputs[cascadingFromKey];
@@ -530,17 +534,20 @@ export function layeredField(opts) {
       r.errors.clear();
       [fromInp, toInp].forEach(inp => inp?.classList.remove('field-error'));
 
-      // Cascade From = prev.To + 1
-      if (i > 0) {
+      if (i === 0) {
+        // First row: From = anchor (always, when provided)
+        if (anchor && fromInp && readVal(fromInp, fromKind) !== anchor) setVal(fromInp, anchor, fromKind);
+        if (fromInp) fromInp.disabled = !!anchor; // user can't edit if anchored
+      } else {
+        // Subsequent rows: From = prev.To + 1, disabled until prev.To set
         const prevTo = readVal(rows[i - 1].inputs[cascadingToKey], toKind);
         if (prevTo) {
           const desired = advanceOne(prevTo, fromKind);
           if (readVal(fromInp, fromKind) !== desired) setVal(fromInp, desired, fromKind);
         }
-        const prevToSet = !!readVal(rows[i - 1].inputs[cascadingToKey], toKind);
         if (fromInp) {
-          fromInp.disabled = !prevToSet;
-          if (fromInp._flatpickr) fromInp._flatpickr.set('clickOpens', prevToSet);
+          fromInp.disabled = true; // always cascaded
+          if (fromInp._flatpickr) fromInp._flatpickr.set('clickOpens', false);
         }
       }
 
