@@ -41,6 +41,13 @@ function periodsPerYear(mode) {
   return 12;
 }
 
+// Number of quarterly payment months in [from..to] (months divisible by 3)
+function countQuarterlyMonths(from, to) {
+  let n = 0;
+  for (let m = from; m <= to; m++) if (m % 3 === 0) n++;
+  return n;
+}
+
 // ============================================================
 // Schedule generation
 // ============================================================
@@ -222,12 +229,14 @@ export function buildCustomizedSchedule(p) {
       pmt = PMT(ratePerYear / 12, count, -urpa);
       if (!layerInstallments['EMI']) layerInstallments['EMI'] = pmt;
     } else if (L.paymentType === 'EQI') {
-      pmt = PMT(ratePerYear / 4, Math.ceil(count / 3), -urpa);
+      // Count payment months in [from..to] where m%3===0
+      const qCount = countQuarterlyMonths(from, to);
+      pmt = PMT(ratePerYear / 4, Math.max(1, qCount), -urpa);
       if (!layerInstallments['EQI']) layerInstallments['EQI'] = pmt;
     } else if (L.paymentType === 'Equal Principal + Interest (Monthly)' && !layerInstallments['Installment']) {
       layerInstallments['Installment'] = (urpa / count) + urpa * monthlyRate;
     } else if (L.paymentType === 'Equal Principal + Interest (Quarterly)' && !layerInstallments['Installment']) {
-      const qPeriods = Math.ceil(count / 3);
+      const qPeriods = Math.max(1, countQuarterlyMonths(from, to));
       layerInstallments['Installment'] = (urpa / qPeriods) + urpa * (ratePerYear / 4);
     } else if (L.paymentType === 'Customized Principal' && !layerInstallments['Customized']) {
       layerInstallments['Customized'] = (L.customPrincipal || 0) + urpa * monthlyRate;
@@ -250,7 +259,8 @@ export function buildCustomizedSchedule(p) {
         principal = pmt - interest;
         installment = pmt;
       } else if (L.paymentType === 'EQI') {
-        if (isPmtMonth) {
+        // EQI quarterly payments fall on absolute month divisible by 3 (Mar, Jun, Sep, Dec)
+        if (m % 3 === 0) {
           interest = urpa * (ratePerYear / 4);
           principal = pmt - interest;
           installment = pmt;
@@ -260,9 +270,9 @@ export function buildCustomizedSchedule(p) {
         principal = urpa / (to - m + 1);
         installment = principal + interest;
       } else if (L.paymentType === 'Equal Principal + Interest (Quarterly)') {
-        if (isPmtMonth) {
+        if (m % 3 === 0) {
           interest = urpa * (ratePerYear / 4);
-          const remainingPeriods = Math.ceil((to - m + 1) / 3);
+          const remainingPeriods = Math.max(1, Math.floor((to - m) / 3) + 1);
           principal = urpa / remainingPeriods;
           installment = principal + interest;
         }

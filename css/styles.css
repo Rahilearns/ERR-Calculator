@@ -461,7 +461,7 @@ select.centered-input { text-align: center; text-align-last: center; }
 .month-box .mb-lbl { font-size: 10px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.4px; }
 .month-box.selected .mb-lbl { color: var(--primary); }
 
-/* Info icon */
+/* Info icon — click toggles a popover (no hover behavior) */
 .info-icon {
   display: inline-flex;
   align-items: center;
@@ -475,10 +475,52 @@ select.centered-input { text-align: center; text-align-last: center; }
   font-size: 9px;
   font-style: italic;
   font-weight: 600;
-  cursor: help;
+  cursor: pointer;
   vertical-align: middle;
+  user-select: none;
 }
 .info-icon:hover { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.info-popover {
+  position: absolute;
+  z-index: 300;
+  max-width: 280px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-strong);
+}
+
+/* Select-all toggle next to header label */
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.label-row label { margin: 0; }
+.select-all-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.select-all-toggle input { accent-color: var(--primary); margin: 0; }
+
+/* Error highlight (layer cells) */
+.field-error,
+input.field-error,
+select.field-error,
+.percent-input-fixed:has(input.field-error) {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(213, 63, 76, 0.15);
+}
 
 /* layered fields (Payment Layers / Rate Layers / Security Layers / COF Layers) */
 .layers {
@@ -608,6 +650,7 @@ tr.totals-row td {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
+  text-align: center;
 }
 .totals-card .label {
   font-size: 11px;
@@ -615,10 +658,12 @@ tr.totals-row td {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-bottom: 4px;
+  text-align: center;
 }
 .totals-card .value {
   font-size: 15px;
   font-weight: 600;
+  text-align: center;
 }
 
 /* Download bar under schedule */
@@ -632,8 +677,18 @@ tr.totals-row td {
 }
 .download-bar .dl-label {
   margin-right: auto;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.download-bar .dl-label .dl-arrow {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text);
+  font-weight: 300;
+  letter-spacing: -2px;
 }
 .results-actions {
   display: flex;
@@ -663,15 +718,31 @@ tr.totals-row td {
   color: var(--primary-text);
   border-color: var(--primary);
 }
+[data-theme="dark"] .flatpickr-months,
 [data-theme="dark"] .flatpickr-months .flatpickr-month,
 [data-theme="dark"] .flatpickr-weekdays,
 [data-theme="dark"] .flatpickr-weekday,
+[data-theme="dark"] .flatpickr-current-month,
 [data-theme="dark"] .flatpickr-current-month .cur-year,
 [data-theme="dark"] .flatpickr-current-month .cur-month,
-[data-theme="dark"] .flatpickr-current-month input.cur-year {
-  background: var(--bg-elev);
-  color: var(--text);
+[data-theme="dark"] .flatpickr-current-month .flatpickr-monthDropdown-months,
+[data-theme="dark"] .flatpickr-current-month input.cur-year,
+[data-theme="dark"] .flatpickr-monthDropdown-month {
+  background: var(--bg-elev) !important;
+  color: var(--text) !important;
 }
+.fp-year-select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+[data-theme="dark"] .fp-year-select { background: var(--bg-elev); color: var(--text); }
+[data-theme="dark"] .fp-year-select option { background: var(--bg-elev); color: var(--text); }
+[data-theme="dark"] .flatpickr-monthDropdown-months option { background: var(--bg-elev); color: var(--text); }
 [data-theme="dark"] .flatpickr-day.flatpickr-disabled,
 [data-theme="dark"] .flatpickr-day.flatpickr-disabled:hover {
   color: var(--text-mute);

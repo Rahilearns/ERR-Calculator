@@ -31,6 +31,33 @@ export function unformat(str) {
   return String(str).replace(/,/g, '').trim();
 }
 
+// Strip everything except digits and keep only the first dot. Used by every decimal input.
+export function sanitizeDecimalString(v) {
+  v = String(v).replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, '');
+  return v;
+}
+
+// Blur handler: format the input's value to 2 decimals (en-US, comma-separated). No-op on empty/dot.
+export function formatTwoDecimalsOnBlur(input) {
+  const raw = input.value.replace(/,/g, '');
+  if (raw === '' || raw === '.') return;
+  const n = Number(raw);
+  if (isNaN(n)) return;
+  input.value = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ISO YYYY-MM-DD -> "DD-Mmm-YYYY"; empty/null -> ""
+export function isoToDDMMMYYYY(iso) {
+  if (!iso) return '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
 export function parseNumber(str) {
   const raw = unformat(str);
   if (raw === '' || raw === '-' || raw === '.') return NaN;

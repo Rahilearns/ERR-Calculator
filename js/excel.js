@@ -1,16 +1,10 @@
 // Excel / Word / PDF I/O via CDN libs
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js';
 
+// Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
   if (v === null || v === undefined || isNaN(v)) return 0;
   return Math.round(Number(v) * 100) / 100;
-}
-function fmtM(v) {
-  if (v === null || v === undefined || isNaN(v)) return '-';
-  return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtP(v) {
-  if (v === null || v === undefined || isNaN(v)) return '-';
-  return (Number(v) * 100).toFixed(2) + '%';
 }
 
 export function downloadScheduleAsExcel(filename, schedule, meta = {}) {
@@ -116,148 +110,159 @@ export function downloadScheduleAsPDF(filename, schedule, meta = {}) {
 }
 
 // =====================================================================
-// Verify Calculation Excel — replicates "Sample format for verification.xlsx"
-// Structure:
-//   Sheet "Inputs & Results":
-//     A1: "ERR Calculator – Verification"
-//     A2: <page title>
-//     A4..: inputs as label|value pairs
-//     A17..: Results with formulas referencing input rows and schedule cells
-//   Sheet "Schedule":
-//     A1..G1 headers; data rows starting A2; TOTAL row at end
+// Verify Calculation Excel — exactly mirrors "Sample format for verification.xlsx"
+// Styling: navy title, green section headers w/ white bold text, accounting/percent
+// number formats matching sample, formulas linking Results -> Inputs + Schedule.
 // =====================================================================
+const FMT = {
+  ACCOUNTING: '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)',
+  ACCOUNTING_INT: '_(* #,##0_);_(* (#,##0);_(* "-"??_);_(@_)',
+  PCT2: '0.00%',
+  PCT4: '0.0000%',
+};
+const WHITE_BOLD = { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 };
+const STYLE = {
+  title: {
+    font: { ...WHITE_BOLD, sz: 12 },
+    fill: { fgColor: { rgb: '002060' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  },
+  greenHeader: {
+    font: WHITE_BOLD,
+    fill: { fgColor: { rgb: '00B050' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  },
+  cellCenter: { alignment: { horizontal: 'center' } },
+};
+
+// Build a SheetJS cell object. Pass exactly one of `value` (literal) or `f` (formula).
+function setCell(ws, addr, value, opts = {}) {
+  const cell = opts.f
+    ? { t: 'n', f: opts.f }
+    : opts.text
+      ? { t: 's', v: value }
+      : { t: 'n', v: value };
+  if (opts.z) cell.z = opts.z;
+  if (opts.s) cell.s = opts.s;
+  ws[addr] = cell;
+}
+
 export function downloadVerificationExcel(filename, ctx) {
   const wb = XLSX.utils.book_new();
   const { schedule, inputs, metrics, pageTitle, pageType, params = {} } = ctx;
-
-  // ----- Schedule sheet first (so we know row range)
-  const hasDate = schedule.rows[0]?.date !== undefined;
   const cof = params.cofRate || 0;
+
+  // ----- Schedule sheet (built first so we know row counts)
   const schedHeaders = ['Sl.', 'Installment', 'Interest', 'Principal', 'URPA', 'Int. Expense (URPA*COF/12)', 'Accrued Interest'];
-  const schedAoA = [schedHeaders];
-  schedule.rows.forEach(r => {
-    schedAoA.push([
-      r.sl,
-      num(r.installment),
-      num(r.interest),
-      num(r.principal),
-      num(r.urpa),
-      num((r.urpa || 0) * (cof / 12) * (r.sl === 0 ? 0 : 1)),
-      num(r.idpReceivable || 0),
-    ]);
+  const wsSched = {};
+  // Header row
+  schedHeaders.forEach((h, c) => setCell(wsSched, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
+  // Data rows
+  schedule.rows.forEach((r, i) => {
+    const rowIdx = i + 1; // header at row 0
+    setCell(wsSched, XLSX.utils.encode_cell({ r: rowIdx, c: 0 }), r.sl, { s: STYLE.cellCenter });
+    [r.installment, r.interest, r.principal, r.urpa,
+     (r.urpa || 0) * (cof / 12) * (r.sl === 0 ? 0 : 1),
+     r.idpReceivable || 0
+    ].forEach((v, k) => setCell(wsSched, XLSX.utils.encode_cell({ r: rowIdx, c: k + 1 }), num(v), { z: FMT.ACCOUNTING }));
   });
-  const lastDataRow = schedule.rows.length + 1; // row 1 is header, data starts row 2
-  // TOTAL row
-  schedAoA.push([
-    'TOTAL',
-    { f: `SUM(B2:B${lastDataRow})` },
-    { f: `SUM(C2:C${lastDataRow})` },
-    { f: `SUM(D2:D${lastDataRow})` },
-    '',
-    { f: `SUM(F2:F${lastDataRow})` },
-    '',
-  ]);
-  const wsSched = XLSX.utils.aoa_to_sheet(schedAoA);
-  const totalRow = lastDataRow + 1;
-  // Re-apply formulas (aoa_to_sheet may store as text otherwise)
-  function setF(ws, addr, f) { ws[addr] = { t: 'n', f }; }
-  setF(wsSched, `B${totalRow}`, `SUM(B2:B${lastDataRow})`);
-  setF(wsSched, `C${totalRow}`, `SUM(C2:C${lastDataRow})`);
-  setF(wsSched, `D${totalRow}`, `SUM(D2:D${lastDataRow})`);
-  setF(wsSched, `F${totalRow}`, `SUM(F2:F${lastDataRow})`);
+  const lastDataRow = schedule.rows.length + 1; // 1-indexed last data row
+  const totalRowIdx = schedule.rows.length + 1; // 0-indexed for setCell
+  // TOTAL row (skip col E — URPA isn't summed; G — accrued shown as-is)
+  setCell(wsSched, XLSX.utils.encode_cell({ r: totalRowIdx, c: 0 }), 'TOTAL', { text: true, s: { font: { bold: true }, alignment: { horizontal: 'center' } } });
+  ['B', 'C', 'D', null, 'F'].forEach((col, k) => {
+    if (!col) return;
+    setCell(wsSched, XLSX.utils.encode_cell({ r: totalRowIdx, c: k + 1 }), 0,
+      { f: `SUM(${col}2:${col}${lastDataRow})`, z: FMT.ACCOUNTING, s: { font: { bold: true } } });
+  });
+  wsSched['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIdx, c: 6 } });
   wsSched['!cols'] = schedHeaders.map(() => ({ wch: 18 }));
 
   // ----- Inputs & Results sheet
-  const inputAoA = [['ERR Calculator – Verification']];
-  inputAoA.push([pageTitle]);
-  inputAoA.push([]);
-  inputAoA.push(['Inputs', 'Values']);
-
-  // Map inputs by page type (mirror sample format for Structured)
-  // Pass derived security amount so EMI/EQI/Installment-based security shows the actual computed value.
-  const inputsForExport = {
-    ...inputs,
-    _derived: {
-      derivedSecurityAmount: metrics.derivedSecurityAmount,
-      derivedSecurityRate: metrics.derivedSecurityRate,
-    },
-  };
-  const inputRowsStart = 5;
+  const wsInputs = {};
+  const inputsForExport = { ...inputs, _derived: {
+    derivedSecurityAmount: metrics.derivedSecurityAmount,
+    derivedSecurityRate: metrics.derivedSecurityRate,
+  }};
   const inputLines = collectInputLinesFor(pageType, inputsForExport);
-  inputLines.forEach(([label, value]) => inputAoA.push([label, value]));
-  // Tenor years derived row (always present)
-  const tenorYearsRow = inputAoA.length + 1; // 1-indexed
-  // Indices of key inputs (for formulas)
-  const idx = inputIndex(inputLines, inputRowsStart);
 
-  inputAoA.push([]);
-  inputAoA.push(['Results', '']);
-  const resStart = inputAoA.length + 1; // Results row (header) is at this index, data after
+  // Title rows (A1: navy, A2: green)
+  setCell(wsInputs, 'A1', 'ERR Calculator – Verification', { text: true, s: STYLE.title });
+  setCell(wsInputs, 'A2', pageTitle, { text: true, s: STYLE.greenHeader });
+  // Section header row 4
+  setCell(wsInputs, 'A4', 'Inputs', { text: true, s: STYLE.greenHeader });
+  setCell(wsInputs, 'B4', 'Values', { text: true, s: STYLE.greenHeader });
 
-  // Default cell refs (may not exist for revisionCustomized — handled separately)
-  const offered = idx.offeredRate, loan = idx.loanAmount;
+  // Input rows starting at row 5
+  const inputStartRow = 5;
+  const idx = inputIndex(inputLines, inputStartRow);
+  inputLines.forEach(([label, value], i) => {
+    const r = inputStartRow + i;
+    setCell(wsInputs, `A${r}`, label, { text: true });
+    const labelLower = label.toLowerCase();
+    const isPct = ['offered rate', 'total cof', 'cash security / fdr rate'].some(k => labelLower.includes(k));
+    const isMoney = ['loan amount', 'cash security / fdr amount', 'initial loan amount'].some(k => labelLower.includes(k));
+    const isInt = ['moratorium period', 'loan tenor', 'number of installments'].some(k => labelLower.includes(k));
+    if (typeof value === 'number') {
+      if (isPct) setCell(wsInputs, `B${r}`, value, { z: FMT.PCT2 });
+      else if (isMoney) setCell(wsInputs, `B${r}`, value, { z: FMT.ACCOUNTING });
+      else if (isInt) setCell(wsInputs, `B${r}`, value, { z: FMT.ACCOUNTING_INT });
+      else setCell(wsInputs, `B${r}`, value);
+    } else {
+      setCell(wsInputs, `B${r}`, String(value || ''), { text: true });
+    }
+  });
+
+  // Results section
+  const resHeaderRow = inputStartRow + inputLines.length + 1;
+  setCell(wsInputs, `A${resHeaderRow}`, 'Results', { text: true, s: STYLE.greenHeader });
+
+  const totalRowExcel = totalRowIdx + 1; // 1-indexed
   const tenor = idx.tenorMonths || idx.loanTenor;
   const cofRow = idx.totalCof;
   const csAmt = idx.csAmount;
   const csRate = idx.csRate;
 
-  // Results rows
-  function addRes(label, formulaOrVal) { inputAoA.push([label, formulaOrVal]); }
-  const lastSchedRow = lastDataRow; // last data row in schedule
-  addRes('Total Interest Received', { f: `Schedule!C${totalRow}` });
-  addRes('Total Interest Expense', { f: `Schedule!F${totalRow}` });
-  addRes('CS Benefit', csAmt && cofRow && tenor
-    ? { f: `B${csAmt}*(B${cofRow}-B${csRate})*B${tenor}/12` }
-    : 0);
-  addRes('Net Interest Income', { f: `B${resStart + 1} + B${resStart + 3} - B${resStart + 2}` });
-  addRes('Avg Portfolio', { f: `AVERAGE(Schedule!E2:E${lastSchedRow})` });
-  // NIM = NII / AvgPortfolio / TenorYears
-  if (tenor) {
-    addRes('NIM', { f: `IF(B${resStart + 5}*(B${tenor}/12)=0, 0, B${resStart + 4} / B${resStart + 5} / (B${tenor}/12))` });
-  } else {
-    addRes('NIM', 0);
-  }
-  addRes('Effective Rate (ERR)', cofRow
-    ? { f: `B${cofRow}+B${resStart + 6}` }
-    : 0);
+  // Declarative result rows. Each row's formula can reference earlier rows via the `ref` lookup.
+  // null formula -> show 0 with no formula (used when prerequisite inputs are missing).
+  const csBenefitF = (csAmt && cofRow && tenor && csRate)
+    ? `B${csAmt}*(B${cofRow}-B${csRate})*B${tenor}/12` : null;
+  const nimF = tenor ? (ref) =>
+    `IF(B${ref.avgPortfolio}*(B${tenor}/12)=0,0,B${ref.netII}/B${ref.avgPortfolio}/(B${tenor}/12))` : null;
+  const errF = cofRow ? (ref) => `B${cofRow}+B${ref.nim}` : null;
 
-  const wsInputs = XLSX.utils.aoa_to_sheet(inputAoA);
+  const resultRows = [
+    { key: 'totalIntReceived', label: 'Total Interest Received', f: `Schedule!C${totalRowExcel}`,         z: FMT.ACCOUNTING },
+    { key: 'totalIntExpense',  label: 'Total Interest Expense',  f: `Schedule!F${totalRowExcel}`,         z: FMT.ACCOUNTING },
+    { key: 'csBenefit',        label: 'CS Benefit',              f: csBenefitF,                            z: FMT.ACCOUNTING },
+    { key: 'netII',            label: 'Net Interest Income',     f: (ref) => `B${ref.totalIntReceived}+B${ref.csBenefit}-B${ref.totalIntExpense}`, z: FMT.ACCOUNTING },
+    { key: 'avgPortfolio',     label: 'Avg Portfolio',           f: `AVERAGE(Schedule!E2:E${lastDataRow})`, z: FMT.ACCOUNTING },
+    { key: 'nim',              label: 'NIM',                     f: nimF,                                  z: FMT.PCT4 },
+    { key: 'err',              label: 'Effective Rate (ERR)',    f: errF,                                  z: FMT.PCT4 },
+  ];
+  const ref = {};
+  resultRows.forEach((row, i) => {
+    const r = resHeaderRow + 1 + i;
+    ref[row.key] = r;
+    setCell(wsInputs, `A${r}`, row.label, { text: true });
+    const f = typeof row.f === 'function' ? row.f(ref) : row.f;
+    setCell(wsInputs, `B${r}`, 0, f ? { f, z: row.z } : { z: row.z });
+  });
+  const lastRow = resHeaderRow + resultRows.length;
+
+  wsInputs['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 1 } });
   wsInputs['!cols'] = [{ wch: 44 }, { wch: 22 }];
-  // Format percentage cells
-  function setPct(ws, addr) {
-    if (ws[addr]) ws[addr].z = '0.00%';
-  }
-  function setMoney(ws, addr) {
-    if (ws[addr]) ws[addr].z = '#,##0.00';
-  }
-  if (offered) setPct(wsInputs, `B${offered}`);
-  if (loan) setMoney(wsInputs, `B${loan}`);
-  if (cofRow) setPct(wsInputs, `B${cofRow}`);
-  if (csAmt) setMoney(wsInputs, `B${csAmt}`);
-  if (csRate) setPct(wsInputs, `B${csRate}`);
-  // Result formula cells: re-apply
-  function applyResultFormulas() {
-    setF(wsInputs, `B${resStart + 1}`, `Schedule!C${totalRow}`);
-    setF(wsInputs, `B${resStart + 2}`, `Schedule!F${totalRow}`);
-    if (csAmt && cofRow && tenor) setF(wsInputs, `B${resStart + 3}`, `B${csAmt}*(B${cofRow}-B${csRate})*B${tenor}/12`);
-    setF(wsInputs, `B${resStart + 4}`, `B${resStart + 1} + B${resStart + 3} - B${resStart + 2}`);
-    setF(wsInputs, `B${resStart + 5}`, `AVERAGE(Schedule!E2:E${lastSchedRow})`);
-    if (tenor) setF(wsInputs, `B${resStart + 6}`, `IF(B${resStart + 5}*(B${tenor}/12)=0, 0, B${resStart + 4} / B${resStart + 5} / (B${tenor}/12))`);
-    if (cofRow) setF(wsInputs, `B${resStart + 7}`, `B${cofRow}+B${resStart + 6}`);
-    setMoney(wsInputs, `B${resStart + 1}`);
-    setMoney(wsInputs, `B${resStart + 2}`);
-    setMoney(wsInputs, `B${resStart + 3}`);
-    setMoney(wsInputs, `B${resStart + 4}`);
-    setMoney(wsInputs, `B${resStart + 5}`);
-    setPct(wsInputs, `B${resStart + 6}`);
-    setPct(wsInputs, `B${resStart + 7}`);
-  }
-  applyResultFormulas();
+  // Merge A1 across A:B (title) and A2 across A:B (page header)
+  wsInputs['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+    { s: { r: resHeaderRow - 1, c: 0 }, e: { r: resHeaderRow - 1, c: 1 } },
+  ];
 
   XLSX.utils.book_append_sheet(wb, wsInputs, 'Inputs & Results');
   XLSX.utils.book_append_sheet(wb, wsSched, 'Schedule');
 
-  XLSX.writeFile(wb, filename);
+  XLSX.writeFile(wb, filename, { cellStyles: true });
 }
 
 // If security type is installment-based, the input csAmount is empty —
@@ -395,10 +400,10 @@ export function downloadReportPDF(filename, ctx) {
     head: [['Field', 'Value']],
     body: [...inputLines.map(formatLine), ...extras],
     startY: y,
-    styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: [37, 70, 224], textColor: 255 },
+    styles: { fontSize: 9, cellPadding: 4, halign: 'center' },
+    headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center' },
     margin: { left: 40, right: 40 },
-    columnStyles: { 0: { cellWidth: 240 } },
+    columnStyles: { 0: { cellWidth: 240, halign: 'center' }, 1: { halign: 'center' } },
   });
   y = doc.lastAutoTable.finalY + 18;
 
@@ -416,10 +421,10 @@ export function downloadReportPDF(filename, ctx) {
       ['Tenor (years)', String(Number(ctx.metrics.tenorYears || 0).toFixed(2))],
     ],
     startY: y,
-    styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: [37, 70, 224], textColor: 255 },
+    styles: { fontSize: 9, cellPadding: 4, halign: 'center' },
+    headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center' },
     margin: { left: 40, right: 40 },
-    columnStyles: { 0: { cellWidth: 240 } },
+    columnStyles: { 0: { cellWidth: 240, halign: 'center' }, 1: { halign: 'center' } },
   });
   y = doc.lastAutoTable.finalY + 18;
 
@@ -437,8 +442,8 @@ export function downloadReportPDF(filename, ctx) {
   doc.autoTable({
     head: [headers], body,
     startY: y,
-    styles: { fontSize: 8, cellPadding: 3 },
-    headStyles: { fillColor: [37, 70, 224], textColor: 255 },
+    styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+    headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center' },
     margin: { left: 40, right: 40 },
   });
 

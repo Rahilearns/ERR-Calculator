@@ -40,19 +40,20 @@ export function deleteSummary(id) {
 export function clearSummaries() { localStorage.removeItem(KEY); }
 export function getMax() { return MAX; }
 
-// ---- Draft preservation (per-tab in-progress inputs) ----
+// ---- Draft preservation (per-tab in-progress inputs)
+// sessionStorage so drafts clear on browser close but persist across in-app navigation
 export function saveDraft(tabKey, state) {
   let all = {};
-  try { all = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}'); } catch {}
+  try { all = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}'); } catch {}
   all[tabKey] = state;
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(all));
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(all));
 }
 export function loadDraft(tabKey) {
-  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}')[tabKey] || null; } catch { return null; }
+  try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}')[tabKey] || null; } catch { return null; }
 }
 export function clearDraft(tabKey) {
   let all = {};
-  try { all = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}'); } catch {}
+  try { all = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}'); } catch {}
   delete all[tabKey];
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(all));
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(all));
 }

@@ -3,6 +3,7 @@ import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
 } from './components.js';
+import { isoToDDMMMYYYY } from './formatting.js';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
@@ -43,8 +44,8 @@ export function renderRegularLoan(root) {
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); });
 
   const idpField = monthBoxesField({
-    name: 'idpFlags',
-    getCount: () => moratoriumPeriod.getValue() || 0,
+    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
   });
 
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
@@ -76,11 +77,8 @@ export function renderRegularLoan(root) {
 
   section.appendChild(el('div', { class: 'form-row' }, loanAmount, offeredRate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
-  const moraSection = el('div', { class: 'section-card subsection hidden' });
-  const moraHead = el('h2', {}, 'Interest During Moratorium Period');
-  moraHead.appendChild(infoIcon(IDP_TOOLTIP));
-  moraSection.appendChild(moraHead);
-  moraSection.appendChild(el('div', { class: 'form-row full' }, idpField));
+  const moraSection = el('div', { class: 'form-row full hidden' });
+  moraSection.appendChild(idpField);
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor, paymentMode));
   section.appendChild(el('div', { class: 'form-row' }, totalCof, fundedSecurityType));
@@ -205,18 +203,25 @@ export function renderCustomizedLoan(root) {
   const moratoriumPeriod = numberField({ label: 'Moratorium Period (Months)', name: 'moratoriumPeriod', integerOnly: true, min: 1 });
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); });
   const idpField = monthBoxesField({
-    name: 'idpFlags',
-    getCount: () => moratoriumPeriod.getValue() || 0,
+    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
   });
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
   loanTenor.input.addEventListener('input', () => { refreshLayerOpts(); refresh(); });
 
-  function monthOptions() {
+  function fromOptions() {
     const tenor = loanTenor.getValue() || 0;
     const mora = moratoriumAvail.getValue() === 'Yes' ? (moratoriumPeriod.getValue() || 0) : 0;
-    const start = mora + 1;
     const arr = [];
-    for (let i = start; i <= tenor; i++) arr.push({ value: String(i), label: `Month ${String(i).padStart(2, '0')}` });
+    for (let i = mora + 1; i <= tenor; i++) arr.push({ value: String(i), label: `Month ${String(i).padStart(2, '0')}` });
+    return arr;
+  }
+  function toOptions() {
+    const tenor = loanTenor.getValue() || 0;
+    const mora = moratoriumAvail.getValue() === 'Yes' ? (moratoriumPeriod.getValue() || 0) : 0;
+    const arr = [];
+    if (tenor) arr.push({ value: 'LAST', label: `Last Month (Month ${String(tenor).padStart(2, '0')})` });
+    for (let i = mora + 1; i <= tenor; i++) arr.push({ value: String(i), label: `Month ${String(i).padStart(2, '0')}` });
     return arr;
   }
 
@@ -224,8 +229,8 @@ export function renderCustomizedLoan(root) {
     label: 'Payment Layers',
     name: 'paymentLayers',
     schema: [
-      { key: 'fromInstallment', label: 'From', type: 'option', options: monthOptions, allowEmpty: true, placeholder: '— select —', width: '1fr' },
-      { key: 'toInstallment', label: 'To', type: 'option', options: monthOptions, allowEmpty: true, placeholder: '— select —', width: '1fr' },
+      { key: 'fromInstallment', label: 'From Date', type: 'option', options: fromOptions, allowEmpty: true, placeholder: '— select —', width: '1fr' },
+      { key: 'toInstallment', label: 'To Date', type: 'option', options: toOptions, allowEmpty: true, placeholder: '— select —', width: '1fr' },
       { key: 'paymentType', label: 'Payment Type', type: 'option', options: [
           'Customized Principal', 'EMI', 'EQI',
           'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)',
@@ -245,13 +250,8 @@ export function renderCustomizedLoan(root) {
       });
     },
   });
-  // Gate Add button until tenor is set; cap at tenor count
-  paymentLayers.canAdd = () => {
-    const tenor = loanTenor.getValue() || 0;
-    if (!tenor) { toast('Enter Loan Tenor (Months) before adding payment layers.', 'error'); return false; }
-    if (paymentLayers.rows.length >= tenor) { toast(`Maximum ${tenor} payment layers (one per month).`, 'error'); return false; }
-    return true;
-  };
+  // Toast on the layered field's "cannot add" callback (e.g. last layer already ends at maturity)
+  paymentLayers.onCannotAdd = (msg) => toast(msg, 'error');
   function refreshLayerOpts() { paymentLayers.refreshOptions(); }
 
   const totalCof = percentField({ label: 'Total Cost of Fund [COF/ISC + OPEX]', name: 'totalCof' });
@@ -265,11 +265,8 @@ export function renderCustomizedLoan(root) {
 
   section.appendChild(el('div', { class: 'form-row' }, loanAmount, offeredRate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
-  const moraSection = el('div', { class: 'section-card subsection hidden' });
-  const moraHead = el('h2', {}, 'Interest During Moratorium Period');
-  moraHead.appendChild(infoIcon(IDP_TOOLTIP));
-  moraSection.appendChild(moraHead);
-  moraSection.appendChild(el('div', { class: 'form-row full' }, idpField));
+  const moraSection = el('div', { class: 'form-row full hidden' });
+  moraSection.appendChild(idpField);
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor));
   section.appendChild(el('div', { class: 'form-row full' }, paymentLayers));
@@ -344,16 +341,18 @@ export function renderCustomizedLoan(root) {
 }
 
 function collectCustomizedInputs(f) {
+  const tenor = f.loanTenor.getValue();
   return {
     offeredRate: f.offeredRate.getValue(),
     loanAmount: f.loanAmount.getValue(),
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
     idpFlags: f.idpField.getValue(),
-    loanTenor: f.loanTenor.getValue(),
+    loanTenor: tenor,
     paymentLayers: f.paymentLayers.getValue().map(r => ({
       fromInstallment: r.fromInstallment ? Number(r.fromInstallment) : null,
-      toInstallment: r.toInstallment ? Number(r.toInstallment) : null,
+      // "LAST" sentinel -> last tenor month
+      toInstallment: r.toInstallment === 'LAST' ? Number(tenor || 0) : (r.toInstallment ? Number(r.toInstallment) : null),
       paymentType: r.paymentType,
       customPrincipal: r.customPrincipal,
     })),
@@ -437,8 +436,8 @@ export function renderRateRevisionStructured(root) {
   moratoriumPeriod.input.addEventListener('input', refresh);
 
   const idpField = monthBoxesField({
-    name: 'idpFlags',
-    getCount: () => moratoriumPeriod.getValue() || 0,
+    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
   });
 
   const paymentModality = optionField({
@@ -533,6 +532,11 @@ export function renderRateRevisionStructured(root) {
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     addLabel: '+ Add Lending Rate Layer',
+    minRows: 2,
+    initialRows: 2,
+    cascadingFromKey: 'fromDate',
+    cascadingToKey: 'toDate',
+    getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
     onChange: () => { attachUserSetMarkers(); syncRateLayerDates(); },
   });
 
@@ -568,11 +572,8 @@ export function renderRateRevisionStructured(root) {
 
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
-  const moraSection = el('div', { class: 'section-card subsection hidden' });
-  const moraHead = el('h2', {}, 'Interest During Moratorium Period');
-  moraHead.appendChild(infoIcon(IDP_TOOLTIP));
-  moraSection.appendChild(moraHead);
-  moraSection.appendChild(el('div', { class: 'form-row full' }, idpField));
+  const moraSection = el('div', { class: 'form-row full hidden' });
+  moraSection.appendChild(idpField);
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
   section.appendChild(el('div', { class: 'form-row full' }, rateLayers));
@@ -888,7 +889,9 @@ function renderResults(panel, ctx) {
       'Total Payment': formatMoney(totPay),
     },
   };
-  const dlLabel = el('span', { class: 'dl-label' }, 'Download the Schedule →');
+  const dlLabel = el('span', { class: 'dl-label' },
+    'Download the Schedule',
+    el('span', { class: 'dl-arrow' }, '⟶'));
   const dlExcel = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Excel');
   const dlWord = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Word');
   const dlPdf = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ PDF');
@@ -906,7 +909,8 @@ function renderResults(panel, ctx) {
 // ============================================================
 function attachDraftAutosave(tabKey, sectionEl, collector) {
   let last = '';
-  function save() {
+  let timer = null;
+  function doSave() {
     try {
       const data = collector();
       const ser = JSON.stringify(data);
@@ -916,12 +920,19 @@ function attachDraftAutosave(tabKey, sectionEl, collector) {
       }
     } catch {}
   }
-  sectionEl.addEventListener('input', save);
-  sectionEl.addEventListener('change', save);
-  // Save on tab navigation
-  window.addEventListener('beforeunload', save);
-  // Initial
-  setTimeout(save, 200);
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; doSave(); }, 300);
+  }
+  function flush() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    doSave();
+  }
+  // Debounce keystrokes; force-save on navigation
+  sectionEl.addEventListener('input', schedule);
+  sectionEl.addEventListener('change', schedule);
+  window.addEventListener('beforeunload', flush);
+  setTimeout(doSave, 200);
 }
 
 function restoreDraft(tabKey, fields) {
@@ -957,23 +968,23 @@ function restoreDraft(tabKey, fields) {
     }
     if (fields.rateLayers && Array.isArray(data.rateLayers) && data.rateLayers.length) {
       fields.rateLayers.setValue(data.rateLayers.map(L => ({
-        fromDate: L.fromDate ? formatDDMMMYYYY(new Date(L.fromDate)) : '',
-        toDate: L.toDate ? formatDDMMMYYYY(new Date(L.toDate)) : '',
+        fromDate: isoToDDMMMYYYY(L.fromDate),
+        toDate: isoToDDMMMYYYY(L.toDate),
         activeRate: L.activeRate,
       })));
     }
     if (fields.securityLayers && Array.isArray(data.securityLayers) && data.securityLayers.length) {
       fields.securityLayers.setValue(data.securityLayers.map(L => ({
-        fromDate: L.fromDate ? formatDDMMMYYYY(new Date(L.fromDate)) : '',
-        toDate: L.toDate ? formatDDMMMYYYY(new Date(L.toDate)) : '',
+        fromDate: isoToDDMMMYYYY(L.fromDate),
+        toDate: isoToDDMMMYYYY(L.toDate),
         amount: L.amount,
         activeRate: L.activeRate,
       })));
     }
     if (fields.cofLayers && Array.isArray(data.cofLayers) && data.cofLayers.length) {
       fields.cofLayers.setValue(data.cofLayers.map(L => ({
-        fromDate: L.fromDate ? formatDDMMMYYYY(new Date(L.fromDate)) : '',
-        toDate: L.toDate ? formatDDMMMYYYY(new Date(L.toDate)) : '',
+        fromDate: isoToDDMMMYYYY(L.fromDate),
+        toDate: isoToDDMMMYYYY(L.toDate),
         cofRate: L.cofRate,
       })));
     }
