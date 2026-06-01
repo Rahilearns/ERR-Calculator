@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260529c';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601a';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -180,6 +180,12 @@ export function downloadVerificationExcel(filename, ctx) {
   const RATE_REF = _idx.offeredRate ? `${inputsSheet}B${_idx.offeredRate}` : null;
   const LOAN_REF = _idx.loanAmount ? `${inputsSheet}B${_idx.loanAmount}` : null;
   const COF_REF = _idx.totalCof ? `${inputsSheet}B${_idx.totalCof}` : null;
+  const TENOR_REF = _idx.loanTenor ? `${inputsSheet}B${_idx.loanTenor}` : null;
+  const MORA_REF = _idx.moratoriumPeriod ? `${inputsSheet}B${_idx.moratoriumPeriod}` : null;
+  // Equal-Principal pages can express principal as a constant formula (Loan / number-of-periods).
+  // Only valid on the Structured page where the whole regular tenor is one EPI stream.
+  const epiCapable = pageType === 'regular' && LOAN_REF && TENOR_REF && MORA_REF;
+  const regularMonthsExpr = TENOR_REF && MORA_REF ? `(${TENOR_REF}-${MORA_REF})` : null;
 
   schedule.rows.forEach((r, i) => {
     const xr = i + 2; // 1-indexed Excel row
@@ -198,41 +204,50 @@ export function downloadVerificationExcel(filename, ctx) {
       return;
     }
 
-    // Installment: keep as a hardcoded value (depends on PMT / Custom Principal logic at build time)
-    setCell(wsSched, `B${xr}`, num(r.installment), { z: FMT.ACCOUNTING });
+    const isPaymentRow = (r.installment || 0) > 0;
+    const isQuarterly = r.paymentType === 'EQI' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
+    const isEPI = r.paymentType === 'Equal Principal + Interest (Monthly)' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
+    const divisor = (isQuarterly && r.interest > 0) ? 4 : 12;
 
-    // Interest = E_prev * Rate / (12 or 4)
-    const isQuarterlyPmt = r.paymentType === 'EQI' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
-    const divisor = (isQuarterlyPmt && r.interest > 0) ? 4 : 12;
+    // Interest (C) = URPA_prev * Rate / (12 or 4). Always a formula when a rate input exists.
     if (RATE_REF && r.interest > 0) {
       setCell(wsSched, `C${xr}`, 0, { f: `E${pr}*${RATE_REF}/${divisor}`, z: FMT.ACCOUNTING });
     } else {
       setCell(wsSched, `C${xr}`, num(r.interest), { z: FMT.ACCOUNTING });
     }
 
-    // Principal — formula = B-C for installment-based rows; constant for Custom Principal;
-    // on the final loan row, D = E_prev so URPA goes to 0.
-    const isFinal = i === schedule.rows.length - 1;
-    if (isFinal) {
-      setCell(wsSched, `D${xr}`, 0, { f: `E${pr}`, z: FMT.ACCOUNTING });
-    } else if (r.paymentType === 'Customized Principal') {
-      setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
-    } else if (r.installment > 0 && r.principal > 0) {
-      setCell(wsSched, `D${xr}`, 0, { f: `B${xr}-C${xr}`, z: FMT.ACCOUNTING });
+    // Principal (D) — independent of accrued interest (the previous B-C formula leaked accrued
+    // into principal). Equal-Principal: constant = Loan / number-of-payment-periods.
+    if (!isPaymentRow || !(r.principal > 0)) {
+      setCell(wsSched, `D${xr}`, num(r.principal || 0), { z: FMT.ACCOUNTING });
+    } else if (isEPI && epiCapable) {
+      // Monthly: Loan / regularMonths ; Quarterly: Loan / (regularMonths/3)
+      const denom = isQuarterly ? `(${regularMonthsExpr}/3)` : regularMonthsExpr;
+      setCell(wsSched, `D${xr}`, 0, { f: `${LOAN_REF}/${denom}`, z: FMT.ACCOUNTING });
     } else {
+      // EMI / EQI / Custom Principal — use the engine's (already accrued-free) base principal.
       setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
     }
 
-    // URPA = E_prev - D
+    // Installment (B) = Interest + Principal + Accrued-carried-from-previous-row.
+    // This is the relationship that actually holds and avoids any accrued leak.
+    if (isPaymentRow) {
+      setCell(wsSched, `B${xr}`, 0, { f: `C${xr}+D${xr}+G${pr}`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsSched, `B${xr}`, num(r.installment || 0), { z: FMT.ACCOUNTING });
+    }
+
+    // URPA (E) = URPA_prev - Principal
     setCell(wsSched, `E${xr}`, 0, { f: `E${pr}-D${xr}`, z: FMT.ACCOUNTING });
 
-    // Int Expense = E_prev * COF/12 — populated EVERY month from sl=1 through final
+    // Int Expense (F) = URPA_prev * COF / 12 — accrues every month sl=1..N
     if (COF_REF) {
       setCell(wsSched, `F${xr}`, 0, { f: `E${pr}*${COF_REF}/12`, z: FMT.ACCOUNTING });
     } else {
       setCell(wsSched, `F${xr}`, num(r.interestExpense || 0), { z: FMT.ACCOUNTING });
     }
 
+    // Accrued Interest (G) — the running unpaid-interest balance from the engine
     setCell(wsSched, `G${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
   });
   const lastDataRow = schedule.rows.length + 1; // 1-indexed last data row
@@ -449,11 +464,12 @@ function inputIndex(lines, start) {
     const key = label.toLowerCase();
     if (key === 'offered rate') idx.offeredRate = row;
     else if (key === 'loan amount' || key === 'initial loan amount') idx.loanAmount = row;
+    else if (key.startsWith('loan tenor including moratorium at disbursement')) idx.tenorMonths = row;
     else if (key.startsWith('loan tenor')) idx.loanTenor = row;
+    else if (key.startsWith('moratorium period')) idx.moratoriumPeriod = row;
     else if (key.startsWith('total cof')) idx.totalCof = row;
     else if (key === 'cash security / fdr amount') idx.csAmount = row;
     else if (key === 'cash security / fdr rate') idx.csRate = row;
-    else if (key.startsWith('loan tenor including moratorium at disbursement')) idx.tenorMonths = row;
   });
   return idx;
 }

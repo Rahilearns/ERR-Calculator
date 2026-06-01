@@ -510,6 +510,7 @@ select.centered-input { text-align: center; text-align-last: center; }
   font-size: 12px;
   color: var(--text-soft);
   cursor: pointer;
+  white-space: nowrap;
 }
 .select-all-toggle input { accent-color: var(--primary); margin: 0; }
 

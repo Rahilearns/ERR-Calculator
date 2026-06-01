@@ -2,19 +2,19 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260529c';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260529c';
+} from './components.js?v=20260601a';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260601a';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics,
-} from './calculations.js?v=20260529c';
-import { formatMoney, formatPercent } from './formatting.js?v=20260529c';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260529c';
+} from './calculations.js?v=20260601a';
+import { formatMoney, formatPercent } from './formatting.js?v=20260601a';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260601a';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
-} from './excel.js?v=20260529c';
+} from './excel.js?v=20260601a';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
