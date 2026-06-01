@@ -2,19 +2,19 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js';
-import { isoToDDMMMYYYY } from './formatting.js';
+} from './components.js?v=20260529c';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260529c';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics,
-} from './calculations.js';
-import { formatMoney, formatPercent } from './formatting.js';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js';
+} from './calculations.js?v=20260529c';
+import { formatMoney, formatPercent } from './formatting.js?v=20260529c';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260529c';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
-} from './excel.js';
+} from './excel.js?v=20260529c';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -440,6 +440,9 @@ export function renderRateRevisionStructured(root) {
       const day = d.getDay(); // 5=Fri, 6=Sat
       return day === 5 || day === 6;
     },
+    // flatpickr does NOT fire a native 'change' event on date pick — route its
+    // onChange here so the layer cascade (first From = disbursement, last To = maturity) updates.
+    onChange: () => rerunLayerRules(),
   });
 
   const moratoriumAvail = optionField({ label: 'Moratorium Given at Disbursement?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No', onChange: refresh });
@@ -501,12 +504,13 @@ export function renderRateRevisionStructured(root) {
     getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
   });
 
-  // External inputs (disbursement / tenor) feed the cascade engine — re-run on change
+  // External inputs (disbursement / tenor) feed the cascade engine — re-run on change.
+  // Disbursement is wired via dateField's onChange above (flatpickr quirk); tenor is a
+  // plain text input so 'input' works.
   function rerunLayerRules() {
     rateLayers.applyLayerRules();
     securityLayers.applyLayerRules();
   }
-  disbursementDate.input.addEventListener('change', rerunLayerRules);
   tenorMonths.input.addEventListener('input', rerunLayerRules);
 
   const nimComparison = optionField({ label: 'Want to show NIM margin comparison?', name: 'nimComparison', options: ['No', 'Yes'], value: 'No', onChange: refresh });

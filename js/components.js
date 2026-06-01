@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260529c';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -208,11 +208,21 @@ export function dateField({ label, name, placeholder = 'dd-Mmm-yyyy', tooltip = 
   };
   field.setValue = (v) => {
     if (!v) { input.value = ''; if (fp) fp.clear(); return; }
-    if (fp) fp.setDate(v, true);
-    else input.value = formatDDMMMYYYY(new Date(v));
+    const dateObj = isoToLocalDate(v);
+    if (fp) fp.setDate(dateObj, false);
+    else input.value = formatDDMMMYYYY(dateObj);
   };
   field.input = input;
   return field;
+}
+
+// Parse an ISO 'YYYY-MM-DD' string to a Date at LOCAL midnight (avoids the UTC
+// off-by-one that `new Date('2020-01-01')` causes in negative-offset timezones).
+export function isoToLocalDate(iso) {
+  if (iso instanceof Date) return iso;
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) { const d = new Date(iso); return isNaN(d) ? null : d; }
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
 // Pre-built year <option> HTML — built once, cloned per flatpickr instance.
@@ -389,7 +399,7 @@ export function layeredField(opts) {
       });
       if (values[s.key] !== undefined && values[s.key] !== null) inp.value = values[s.key];
       else if (s.allowEmpty) inp.value = '';
-      inp.addEventListener('change', fireChange);
+      inp.addEventListener('change', () => { inp.dataset.userSet = '1'; fireChange(); });
     } else if (s.type === 'date') {
       inp = el('input', { type: 'text', placeholder: 'dd-Mmm-yyyy', class: 'centered-input date-input' });
       if (values[s.key]) inp.value = values[s.key];
@@ -491,8 +501,14 @@ export function layeredField(opts) {
   function setVal(inp, v, kind) {
     if (!inp) return;
     if (kind === 'date') {
-      if (inp._flatpickr) inp._flatpickr.setDate(v, false);
-      else inp.value = v ? formatDDMMMYYYY(new Date(v)) : '';
+      // clear(false) / setDate(date, false): the `false` suppresses flatpickr's onChange so
+      // programmatic updates don't get mistaken for user edits (which would set userSet).
+      if (!v) { if (inp._flatpickr) inp._flatpickr.clear(false); else inp.value = ''; return; }
+      // v is an ISO 'YYYY-MM-DD' string. flatpickr is configured with dateFormat 'd-M-Y',
+      // so passing the ISO string would be mis-parsed — pass a real Date (local midnight).
+      const dateObj = isoToLocalDate(v);
+      if (inp._flatpickr) inp._flatpickr.setDate(dateObj, false);
+      else inp.value = formatDDMMMYYYY(dateObj);
     } else {
       inp.value = (v === null || v === undefined) ? '' : String(v);
     }
@@ -528,35 +544,33 @@ export function layeredField(opts) {
     const maturity = getMaturityValue();
     const anchor = getAnchor ? (getAnchor()?.value || null) : null;
 
+    // Every field stays enabled (editable). Derived fields are AUTO-FILLED unless the
+    // user has manually edited that specific cell (tracked via dataset.userSet, which is
+    // only set by a genuine flatpickr/user change — never by programmatic setVal).
     rows.forEach((r, i) => {
       const fromInp = r.inputs[cascadingFromKey];
       const toInp = r.inputs[cascadingToKey];
       r.errors.clear();
       [fromInp, toInp].forEach(inp => inp?.classList.remove('field-error'));
 
-      if (i === 0) {
-        // First row: From = anchor (always, when provided)
-        if (anchor && fromInp && readVal(fromInp, fromKind) !== anchor) setVal(fromInp, anchor, fromKind);
-        if (fromInp) fromInp.disabled = !!anchor; // user can't edit if anchored
-      } else {
-        // Subsequent rows: From = prev.To + 1, disabled until prev.To set
-        const prevTo = readVal(rows[i - 1].inputs[cascadingToKey], toKind);
-        if (prevTo) {
-          const desired = advanceOne(prevTo, fromKind);
-          if (readVal(fromInp, fromKind) !== desired) setVal(fromInp, desired, fromKind);
-        }
-        if (fromInp) {
-          fromInp.disabled = true; // always cascaded
-          if (fromInp._flatpickr) fromInp._flatpickr.set('clickOpens', false);
+      // FROM
+      if (fromInp && fromInp.dataset.userSet !== '1') {
+        if (i === 0) {
+          // First row anchored to the external source (e.g. disbursement date / mora+1 month)
+          setVal(fromInp, anchor, fromKind);
+        } else {
+          // Subsequent rows cascade from the previous row's To + 1 unit (cleared if prev To empty)
+          const prevTo = readVal(rows[i - 1].inputs[cascadingToKey], toKind);
+          setVal(fromInp, prevTo ? advanceOne(prevTo, fromKind) : null, fromKind);
         }
       }
 
-      // Last row: To defaults to maturity ONLY if currently empty; remains editable
+      // TO — only the LAST row auto-defaults to maturity (when not user-edited).
+      // Non-last To is fully user-controlled (that's the field a user shortens to add a layer).
       const isLast = i === rows.length - 1;
-      if (isLast && maturity && toInp && !readVal(toInp, toKind)) {
+      if (isLast && toInp && toInp.dataset.userSet !== '1') {
         setVal(toInp, maturity, toKind);
       }
-      if (toInp) toInp.disabled = false;
     });
 
     // Validate logical consistency

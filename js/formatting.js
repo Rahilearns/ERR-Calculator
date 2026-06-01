@@ -49,13 +49,13 @@ export function formatTwoDecimalsOnBlur(input) {
 }
 
 // ISO YYYY-MM-DD -> "DD-Mmm-YYYY"; empty/null -> ""
+// Parses the ISO parts directly (no `new Date(iso)` UTC off-by-one).
 export function isoToDDMMMYYYY(iso) {
   if (!iso) return '';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  return `${m[3]}-${months[Number(m[2]) - 1]}-${m[1]}`;
 }
 
 export function parseNumber(str) {
