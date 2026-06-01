@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601a';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601b';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -187,6 +187,29 @@ export function downloadVerificationExcel(filename, ctx) {
   const epiCapable = pageType === 'regular' && LOAN_REF && TENOR_REF && MORA_REF;
   const regularMonthsExpr = TENOR_REF && MORA_REF ? `(${TENOR_REF}-${MORA_REF})` : null;
 
+  // Customized Equal-Principal layers: principal is constant within a layer =
+  // (layer-start balance) / (layer periods). The layer-start balance is a real
+  // Schedule cell (URPA of the row just before the layer's first month), so we
+  // can reference it: D = E{layerStartRow} / periods.
+  // Build sl -> { startCell, periods } for every EPI-layer month.
+  const epiLayerBySl = {};
+  if (pageType === 'customized' && Array.isArray(inputs.paymentLayers)) {
+    inputs.paymentLayers.forEach((L) => {
+      const isQ = L.paymentType === 'Equal Principal + Interest (Quarterly)';
+      const isM = L.paymentType === 'Equal Principal + Interest (Monthly)';
+      if (!isQ && !isM) return;
+      const from = Number(L.fromInstallment), to = Number(L.toInstallment);
+      if (!from || !to) return;
+      // Layer-start balance is URPA at sl=from-1 → Excel row (from-1)+2 = from+1
+      const startCell = `E${from + 1}`;
+      let periods = 0;
+      if (isM) periods = to - from + 1;
+      else for (let m = from; m <= to; m++) if (m % 3 === 0) periods++;
+      if (periods < 1) periods = 1;
+      for (let m = from; m <= to; m++) epiLayerBySl[m] = { startCell, periods };
+    });
+  }
+
   schedule.rows.forEach((r, i) => {
     const xr = i + 2; // 1-indexed Excel row
     const pr = xr - 1; // previous-row Excel index
@@ -217,13 +240,18 @@ export function downloadVerificationExcel(filename, ctx) {
     }
 
     // Principal (D) — independent of accrued interest (the previous B-C formula leaked accrued
-    // into principal). Equal-Principal: constant = Loan / number-of-payment-periods.
+    // into principal). Equal-Principal: constant = balance / number-of-payment-periods.
+    const epiLayer = epiLayerBySl[r.sl];
     if (!isPaymentRow || !(r.principal > 0)) {
       setCell(wsSched, `D${xr}`, num(r.principal || 0), { z: FMT.ACCOUNTING });
     } else if (isEPI && epiCapable) {
+      // Structured: one EPI stream over the whole regular tenor.
       // Monthly: Loan / regularMonths ; Quarterly: Loan / (regularMonths/3)
       const denom = isQuarterly ? `(${regularMonthsExpr}/3)` : regularMonthsExpr;
       setCell(wsSched, `D${xr}`, 0, { f: `${LOAN_REF}/${denom}`, z: FMT.ACCOUNTING });
+    } else if (isEPI && epiLayer) {
+      // Customized EPI layer: constant = (layer-start URPA cell) / (layer periods)
+      setCell(wsSched, `D${xr}`, 0, { f: `${epiLayer.startCell}/${epiLayer.periods}`, z: FMT.ACCOUNTING });
     } else {
       // EMI / EQI / Custom Principal — use the engine's (already accrued-free) base principal.
       setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
