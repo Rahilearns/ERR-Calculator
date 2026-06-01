@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601b';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601c';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -348,7 +348,10 @@ export function downloadVerificationExcel(filename, ctx) {
     { key: 'totalIntExpense',  label: 'Total Interest Expense',  f: `Schedule!F${totalRowExcel}`,         z: FMT.ACCOUNTING },
     { key: 'csBenefit',        label: 'CS Benefit',              f: csBenefitF,                            z: FMT.ACCOUNTING },
     { key: 'netII',            label: 'Net Interest Income',     f: (ref) => `B${ref.totalIntReceived}+B${ref.csBenefit}-B${ref.totalIntExpense}`, z: FMT.ACCOUNTING },
-    { key: 'avgPortfolio',     label: 'Avg Portfolio',           f: `AVERAGE(Schedule!E2:E${lastDataRow})`, z: FMT.ACCOUNTING },
+    // Avg Portfolio averages the START-of-month balances (sl 0 .. N-1), EXCLUDING the final
+    // row whose URPA is 0 after the last payment. Matches computeMetrics (rows.slice(0,-1))
+    // and the original "Sample format for verification" (E2:E61 for a 60-mo loan, not E62).
+    { key: 'avgPortfolio',     label: 'Avg Portfolio',           f: `AVERAGE(Schedule!E2:E${lastDataRow - 1})`, z: FMT.ACCOUNTING },
     { key: 'nim',              label: 'NIM',                     f: nimF,                                  z: FMT.PCT4 },
     { key: 'err',              label: 'Effective Rate (ERR)',    f: errF,                                  z: FMT.PCT4 },
   ];
