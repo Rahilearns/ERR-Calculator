@@ -494,13 +494,13 @@ select.centered-input { text-align: center; text-align-last: center; }
   box-shadow: var(--shadow-strong);
 }
 
-/* Select-all toggle next to header label */
+/* Label + Select-all stacked (label on top row, checkbox on its own row below) */
 .label-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 6px;
+  align-items: flex-start;
 }
 .label-row label { margin: 0; }
 .select-all-toggle {

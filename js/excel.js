@@ -153,18 +153,87 @@ export function downloadVerificationExcel(filename, ctx) {
   const cof = params.cofRate || 0;
 
   // ----- Schedule sheet (built first so we know row counts)
+  // Each row uses cell-referenced formulas where possible so users can trace every calculation.
+  // Column layout: A=Sl, B=Installment, C=Interest, D=Principal, E=URPA, F=Int.Expense, G=Accrued.
+  // Excel row r corresponds to schedule index i = r - 2 (header at row 1, sl 0 at row 2).
+  //
+  // Formulas (sheet "Inputs & Results" prefix omitted in code; resolved via inputsSheetRef):
+  //   Row 2 (sl 0): E2 = Inputs!B<loan>; everything else 0
+  //   Row r (>=3):  C = E_prev * Rate / 12   (or /4 for EQI/Q-EPI payment months only)
+  //                 D = B - C                (or = E_prev on the final row to settle remaining)
+  //                 E = E_prev - D
+  //                 F = E_prev * COF / 12    (always non-zero from sl=1 through final)
+  //   Where the page has no single Rate/COF input (Rate Revision Customized), the formula
+  //   falls back to a hardcoded value so the column still totals correctly.
   const schedHeaders = ['Sl.', 'Installment', 'Interest', 'Principal', 'URPA', 'Int. Expense (URPA*COF/12)', 'Accrued Interest'];
   const wsSched = {};
-  // Header row
   schedHeaders.forEach((h, c) => setCell(wsSched, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
-  // Data rows
+
+  // Pre-compute input-cell references on the Inputs & Results sheet so the Schedule can quote them
+  const inputsForRefs = { ...inputs, _derived: {
+    derivedSecurityAmount: metrics.derivedSecurityAmount,
+    derivedSecurityRate: metrics.derivedSecurityRate,
+  }};
+  const _inputLines = collectInputLinesFor(pageType, inputsForRefs);
+  const _idx = inputIndex(_inputLines, 5); // input rows start at Excel row 5
+  const inputsSheet = `'Inputs & Results'!`;
+  const RATE_REF = _idx.offeredRate ? `${inputsSheet}B${_idx.offeredRate}` : null;
+  const LOAN_REF = _idx.loanAmount ? `${inputsSheet}B${_idx.loanAmount}` : null;
+  const COF_REF = _idx.totalCof ? `${inputsSheet}B${_idx.totalCof}` : null;
+
   schedule.rows.forEach((r, i) => {
-    const rowIdx = i + 1; // header at row 0
-    setCell(wsSched, XLSX.utils.encode_cell({ r: rowIdx, c: 0 }), r.sl, { s: STYLE.cellCenter });
-    [r.installment, r.interest, r.principal, r.urpa,
-     (r.urpa || 0) * (cof / 12) * (r.sl === 0 ? 0 : 1),
-     r.idpReceivable || 0
-    ].forEach((v, k) => setCell(wsSched, XLSX.utils.encode_cell({ r: rowIdx, c: k + 1 }), num(v), { z: FMT.ACCOUNTING }));
+    const xr = i + 2; // 1-indexed Excel row
+    const pr = xr - 1; // previous-row Excel index
+    setCell(wsSched, `A${xr}`, r.sl, { s: STYLE.cellCenter });
+
+    if (i === 0) {
+      // Disbursement row — URPA is the loan amount (formula if available)
+      setCell(wsSched, `B${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(wsSched, `C${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(wsSched, `D${xr}`, 0, { z: FMT.ACCOUNTING });
+      if (LOAN_REF) setCell(wsSched, `E${xr}`, 0, { f: LOAN_REF, z: FMT.ACCOUNTING });
+      else setCell(wsSched, `E${xr}`, num(r.urpa), { z: FMT.ACCOUNTING });
+      setCell(wsSched, `F${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(wsSched, `G${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
+      return;
+    }
+
+    // Installment: keep as a hardcoded value (depends on PMT / Custom Principal logic at build time)
+    setCell(wsSched, `B${xr}`, num(r.installment), { z: FMT.ACCOUNTING });
+
+    // Interest = E_prev * Rate / (12 or 4)
+    const isQuarterlyPmt = r.paymentType === 'EQI' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
+    const divisor = (isQuarterlyPmt && r.interest > 0) ? 4 : 12;
+    if (RATE_REF && r.interest > 0) {
+      setCell(wsSched, `C${xr}`, 0, { f: `E${pr}*${RATE_REF}/${divisor}`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsSched, `C${xr}`, num(r.interest), { z: FMT.ACCOUNTING });
+    }
+
+    // Principal — formula = B-C for installment-based rows; constant for Custom Principal;
+    // on the final loan row, D = E_prev so URPA goes to 0.
+    const isFinal = i === schedule.rows.length - 1;
+    if (isFinal) {
+      setCell(wsSched, `D${xr}`, 0, { f: `E${pr}`, z: FMT.ACCOUNTING });
+    } else if (r.paymentType === 'Customized Principal') {
+      setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
+    } else if (r.installment > 0 && r.principal > 0) {
+      setCell(wsSched, `D${xr}`, 0, { f: `B${xr}-C${xr}`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
+    }
+
+    // URPA = E_prev - D
+    setCell(wsSched, `E${xr}`, 0, { f: `E${pr}-D${xr}`, z: FMT.ACCOUNTING });
+
+    // Int Expense = E_prev * COF/12 — populated EVERY month from sl=1 through final
+    if (COF_REF) {
+      setCell(wsSched, `F${xr}`, 0, { f: `E${pr}*${COF_REF}/12`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsSched, `F${xr}`, num(r.interestExpense || 0), { z: FMT.ACCOUNTING });
+    }
+
+    setCell(wsSched, `G${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
   });
   const lastDataRow = schedule.rows.length + 1; // 1-indexed last data row
   const totalRowIdx = schedule.rows.length + 1; // 0-indexed for setCell
@@ -248,15 +317,61 @@ export function downloadVerificationExcel(filename, ctx) {
     const f = typeof row.f === 'function' ? row.f(ref) : row.f;
     setCell(wsInputs, `B${r}`, 0, f ? { f, z: row.z } : { z: row.z });
   });
-  const lastRow = resHeaderRow + resultRows.length;
+  let lastRow = resHeaderRow + resultRows.length;
 
-  wsInputs['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 1 } });
-  wsInputs['!cols'] = [{ wch: 44 }, { wch: 22 }];
-  // Merge A1 across A:B (title) and A2 across A:B (page header)
+  // ===========================================================
+  // Yearly Summary table (mirrors "from Fin" L8..L15 methodology)
+  // Year | Income | Expense | LS Benefit | Net Int Income | Avg Portfolio | NIM
+  // ===========================================================
+  const totalMonths = schedule.rows.length - 1;
+  const years = Math.ceil(totalMonths / 12);
+  const ySummaryHeaderRow = lastRow + 2;
+  setCell(wsInputs, `A${ySummaryHeaderRow}`, 'Yearly Summary', { text: true, s: STYLE.greenHeader });
+  const yColHeaderRow = ySummaryHeaderRow + 1;
+  const ySumHeaders = ['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit',
+                       'Net Interest Income', 'Average Portfolio', 'NIM'];
+  ySumHeaders.forEach((h, c) => setCell(wsInputs, XLSX.utils.encode_cell({ r: yColHeaderRow - 1, c }),
+    h, { text: true, s: STYLE.greenHeader }));
+
+  // For each year y (1..years), compute month range and write formulas
+  for (let y = 1; y <= years; y++) {
+    const yRow = yColHeaderRow + y; // 1-indexed Excel row
+    const firstSl = (y - 1) * 12 + 1;
+    const lastSl = Math.min(y * 12, totalMonths);
+    // Schedule rows: sl m is at Excel row m+2
+    const schedFromExcel = firstSl + 2;
+    const schedToExcel = lastSl + 2;
+    // For Avg Portfolio: average URPA at start of each month in year y
+    // URPA at start of month m is rows[m-1].urpa → Excel row m+1
+    const avgPortFromExcel = firstSl + 1; // sl (firstSl - 1) row = Excel row firstSl+1
+    const avgPortToExcel = lastSl + 1;
+
+    setCell(wsInputs, `A${yRow}`, `Year ${String(y).padStart(2, '0')}`, { text: true, s: STYLE.cellCenter });
+    setCell(wsInputs, `B${yRow}`, 0, { f: `SUM(Schedule!C${schedFromExcel}:C${schedToExcel})`, z: FMT.ACCOUNTING });
+    setCell(wsInputs, `C${yRow}`, 0, { f: `SUM(Schedule!F${schedFromExcel}:F${schedToExcel})`, z: FMT.ACCOUNTING });
+    // Loan Security Benefit per year: CS_Amount * (COF - CS_Rate). Constant per year.
+    if (csAmt && cofRow && csRate) {
+      setCell(wsInputs, `D${yRow}`, 0, { f: `B${csAmt}*(B${cofRow}-B${csRate})`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsInputs, `D${yRow}`, 0, { z: FMT.ACCOUNTING });
+    }
+    // Net Interest Income = Income + LS Benefit - Expense
+    setCell(wsInputs, `E${yRow}`, 0, { f: `B${yRow}+D${yRow}-C${yRow}`, z: FMT.ACCOUNTING });
+    // Avg Portfolio = AVERAGE of URPA across months in the year
+    setCell(wsInputs, `F${yRow}`, 0, { f: `AVERAGE(Schedule!E${avgPortFromExcel}:E${avgPortToExcel})`, z: FMT.ACCOUNTING });
+    // NIM = NetII / AvgPort
+    setCell(wsInputs, `G${yRow}`, 0, { f: `IF(F${yRow}=0,0,E${yRow}/F${yRow})`, z: FMT.PCT4 });
+  }
+  lastRow = yColHeaderRow + years;
+
+  wsInputs['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 6 } });
+  wsInputs['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }];
+  // Merges: title + page header + Results header + Yearly Summary header (across A:G)
   wsInputs['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
     { s: { r: resHeaderRow - 1, c: 0 }, e: { r: resHeaderRow - 1, c: 1 } },
+    { s: { r: ySummaryHeaderRow - 1, c: 0 }, e: { r: ySummaryHeaderRow - 1, c: 6 } },
   ];
 
   XLSX.utils.book_append_sheet(wb, wsInputs, 'Inputs & Results');

@@ -41,6 +41,18 @@ function periodsPerYear(mode) {
   return 12;
 }
 
+// Apply the spec: Int Expense at end of month N = URPA at start of month N * COF/12.
+// URPA at start of month N is the post-payment URPA from row N-1.
+// Row 0 (disbursement) carries no expense.
+// `cofForRow(i)` lets callers vary COF per row (e.g. Rate Revision); default uses constant monthlyCof.
+function applyIntExpenseAccrual(rows, monthlyCof, cofForRow = null) {
+  for (let i = 0; i < rows.length; i++) {
+    if (i === 0) { rows[i].interestExpense = 0; continue; }
+    const cof = cofForRow ? cofForRow(i) : monthlyCof;
+    rows[i].interestExpense = (rows[i - 1].urpa || 0) * cof;
+  }
+}
+
 // Number of quarterly payment months in [from..to] (months divisible by 3)
 function countQuarterlyMonths(from, to) {
   let n = 0;
@@ -100,7 +112,10 @@ export function buildStructuredSchedule(p) {
   }
 
   // Regular installments
-  if (regularPeriods <= 0) return { rows, accruedReceivable };
+  if (regularPeriods <= 0) {
+    applyIntExpenseAccrual(rows, monthlyCof);
+    return { rows, accruedReceivable };
+  }
 
   // Compute the "base" regular installment without accrued-receivable add-on (used as the EMI/installment-size for security calc)
   let baseInstallment = 0;
@@ -169,6 +184,7 @@ export function buildStructuredSchedule(p) {
       });
     }
   }
+  applyIntExpenseAccrual(rows, monthlyCof);
   return { rows, accruedReceivable, baseInstallment };
 }
 
@@ -301,6 +317,7 @@ export function buildCustomizedSchedule(p) {
       if (installment > 0) paymentCounter++;
     }
   }
+  applyIntExpenseAccrual(rows, monthlyCof);
   return { rows, accruedReceivable, layerInstallments };
 }
 
@@ -342,8 +359,8 @@ export function computeMetrics(schedule, params) {
   const avgPortfolio = urpaSeries.length ? urpaSeries.reduce((s, v) => s + v, 0) / urpaSeries.length : 0;
 
   const totalInterest = rows.reduce((s, r) => s + r.interest, 0);
-  // Interest expense from row 0 is zero (no interest on disbursement day). Sum rows[1..N-1] (last row URPA=0 -> 0 anyway).
-  const totalInterestExpense = rows.slice(1, -1).reduce((s, r) => s + (r.interestExpense || 0), 0);
+  // Int expense accrues at end of every month from sl 1 through sl N (last month).
+  const totalInterestExpense = rows.slice(1).reduce((s, r) => s + (r.interestExpense || 0), 0);
   const totalMonths = rows.length - 1;
   const tenorYears = totalMonths / 12;
 
@@ -482,13 +499,14 @@ export function buildRateRevisionStructured(p) {
 
     rows.push({
       sl: m, date: d, installment, interest, principal, urpa,
-      interestExpense: urpa * monthlyCof,
+      interestExpense: 0, // populated below per applyIntExpenseAccrual
       rate: ratePm, cof: cofPm,
       securityAmount: sec.amount, securityRate: sec.rate,
       idpReceivable: accruedReceivable,
     });
   }
 
+  applyIntExpenseAccrual(rows, 0, (i) => (rows[i].cof || 0) / 12);
   return { rows };
 }
 
@@ -497,7 +515,7 @@ export function computeRevisionMetrics(schedule, { cofLayers, securityLayers, ha
   const urpaSeries = rows.slice(0, -1).map(r => r.urpa);
   const avgPortfolio = urpaSeries.length ? urpaSeries.reduce((s, v) => s + v, 0) / urpaSeries.length : 0;
   const totalInterest = rows.reduce((s, r) => s + r.interest, 0);
-  const totalInterestExpense = rows.slice(1, -1).reduce((s, r) => s + (r.interestExpense || 0), 0);
+  const totalInterestExpense = rows.slice(1).reduce((s, r) => s + (r.interestExpense || 0), 0);
   const totalMonths = rows.length - 1;
   const tenorYears = totalMonths / 12;
 

@@ -440,7 +440,6 @@ export function renderRateRevisionStructured(root) {
       const day = d.getDay(); // 5=Fri, 6=Sat
       return day === 5 || day === 6;
     },
-    onChange: () => syncRateLayerDates(),
   });
 
   const moratoriumAvail = optionField({ label: 'Moratorium Given at Disbursement?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No', onChange: refresh });
@@ -559,7 +558,7 @@ export function renderRateRevisionStructured(root) {
     paymentModality, tenorMonths, rateLayers, securityLayers, nimComparison, cofLayers,
   });
   refresh();
-  setTimeout(() => { attachUserSetMarkers(); syncRateLayerDates(); }, 150);
+  setTimeout(() => { rateLayers.applyLayerRules(); securityLayers.applyLayerRules(); }, 150);
   attachDraftAutosave('revisionStructured', section, () => collectRevisionStructuredInputs({
     initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
     paymentModality, tenorMonths, rateLayers, securityLayers, nimComparison, cofLayers,

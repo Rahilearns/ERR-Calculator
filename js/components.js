@@ -551,14 +551,12 @@ export function layeredField(opts) {
         }
       }
 
-      // Last row: force To = maturity
+      // Last row: To defaults to maturity ONLY if currently empty; remains editable
       const isLast = i === rows.length - 1;
-      if (isLast && maturity) {
-        if (readVal(toInp, toKind) !== maturity) setVal(toInp, maturity, toKind);
-        if (toInp) toInp.disabled = true;
-      } else if (toInp) {
-        toInp.disabled = false;
+      if (isLast && maturity && toInp && !readVal(toInp, toKind)) {
+        setVal(toInp, maturity, toKind);
       }
+      if (toInp) toInp.disabled = false;
     });
 
     // Validate logical consistency
