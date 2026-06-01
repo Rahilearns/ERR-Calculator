@@ -13,3 +13,4 @@ Thumbs.db
 
 # Claude Code config
 .claude/
+~WRL*.tmp
