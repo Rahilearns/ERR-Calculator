@@ -2,8 +2,13 @@
 *.xlsx
 *.pdf
 *.docx
+*.png
 ~$*
 Prompts.*
+
+# ...but DO ship the downloadable sample assets
+!assets/
+!assets/*.xlsx
 
 # Editor / OS
 .DS_Store

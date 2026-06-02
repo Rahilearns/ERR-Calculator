@@ -418,7 +418,7 @@ export function buildRateRevisionStructured(p) {
     tenorMonths,
     rateLayers,
     securityLayers,
-    cofLayers = null,
+    cofData = null,     // sorted array of { date: 'YYYY-MM-DD', rate } from the uploaded COF file
   } = p;
 
   const ppy = periodsPerYear(paymentModality);
@@ -426,20 +426,32 @@ export function buildRateRevisionStructured(p) {
 
   function addMonths(d, m) { const x = new Date(d); x.setMonth(x.getMonth() + m); return x; }
   function fmt(d) { return d.toISOString().slice(0, 10); }
+
+  // Lending rate effective on a date = the LAST layer whose fromDate <= date (extends the last
+  // rate forward past the final layer's To, so the maturity-month payment keeps the last rate).
   function getRateOn(dateStr) {
     if (!rateLayers || !rateLayers.length) return 0;
+    let result = rateLayers[0].activeRate || 0;
+    let bestFrom = null;
     for (const r of rateLayers) {
-      if (r.fromDate && r.toDate && dateStr >= r.fromDate && dateStr <= r.toDate) return r.activeRate || 0;
+      if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
+        bestFrom = r.fromDate; result = r.activeRate || 0;
+      }
     }
-    return rateLayers[0].activeRate || 0;
+    return result;
   }
+  // COF effective on a date = the LAST uploaded COF entry whose date <= the given date.
+  // 0 if the date precedes the first entry (uncovered period). cofData is pre-filtered to
+  // entries effective on/before maturity, so the last entry naturally extends to maturity.
   function getCofOn(dateStr) {
-    if (!cofLayers || !cofLayers.length) return 0;
-    for (const r of cofLayers) {
-      if (r.fromDate && r.toDate && dateStr >= r.fromDate && dateStr <= r.toDate) return r.cofRate || 0;
+    if (!cofData || !cofData.length) return 0;
+    let result = 0;
+    for (const e of cofData) {
+      if (e.date <= dateStr) result = e.rate; else break;
     }
-    return 0;
+    return result;
   }
+  // Security amount/rate effective on a date = the layer covering that exact date (NOT lagged).
   function getSecurityOn(dateStr) {
     if (!securityLayers || !securityLayers.length) return { amount: 0, rate: 0 };
     for (const r of securityLayers) {
@@ -453,22 +465,25 @@ export function buildRateRevisionStructured(p) {
   const rows = [];
   let urpa = initialLoanAmount;
   const date0 = fmt(start);
+  const sec0 = getSecurityOn(date0);
   rows.push({
     sl: 0, date: date0, installment: 0, interest: 0, principal: 0, urpa,
     interestExpense: 0,
     rate: getRateOn(date0), cof: getCofOn(date0),
-    securityAmount: getSecurityOn(date0).amount, securityRate: getSecurityOn(date0).rate,
+    securityAmount: sec0.amount, securityRate: sec0.rate,
   });
 
   let accruedReceivable = 0;
 
   for (let m = 1; m <= tenorMonths; m++) {
     const d = fmt(addMonths(start, m));
-    const ratePm = getRateOn(d);
-    const cofPm = getCofOn(d);
-    const sec = getSecurityOn(d);
+    // Rate/COF apply on a one-month lag: the value effective at the START of the accrual
+    // month (the previous row's date), matching the rectified files.
+    const accrualStart = fmt(addMonths(start, m - 1));
+    const ratePm = getRateOn(accrualStart);
+    const cofPm = getCofOn(accrualStart);
+    const sec = getSecurityOn(d); // security uses the current month's date
     const monthlyRate = ratePm / 12;
-    const monthlyCof = cofPm / 12;
 
     let installment = 0, interest = 0, principal = 0;
     if (m <= moratoriumMonths) {
@@ -525,7 +540,27 @@ export function buildRateRevisionStructured(p) {
   return { rows };
 }
 
-export function computeRevisionMetrics(schedule, { cofLayers, securityLayers, hasNimComparison }) {
+// Convert uploaded COF rows -> sorted, maturity-filtered effective-date list.
+// Returns { cofData, warning }. cofData = [{date, rate}] ascending; warning set if the first
+// COF effective date is after disbursement (uncovered head period uses 0%).
+export function buildCofData(uploadedCof, disbursementISO, maturityISO) {
+  if (!uploadedCof || !uploadedCof.length) return { cofData: [], warning: null };
+  const sorted = uploadedCof
+    .filter(e => e.date && (e.rate !== null && e.rate !== undefined))
+    .map(e => ({ date: e.date, rate: Number(e.rate) }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // Only consider records effective on/before maturity.
+  const filtered = maturityISO ? sorted.filter(e => e.date <= maturityISO) : sorted;
+  let warning = null;
+  if (filtered.length && disbursementISO && filtered[0].date > disbursementISO) {
+    warning = `The uploaded COF data does not cover the full loan timeline — no COF before ${filtered[0].date}. ` +
+              `0.00% COF (no interest expense) is applied from disbursement (${disbursementISO}) until then. ` +
+              `Add an earlier COF record to cover the whole period.`;
+  }
+  return { cofData: filtered, warning };
+}
+
+export function computeRevisionMetrics(schedule) {
   const rows = schedule.rows;
   const urpaSeries = rows.slice(0, -1).map(r => r.urpa);
   const avgPortfolio = urpaSeries.length ? urpaSeries.reduce((s, v) => s + v, 0) / urpaSeries.length : 0;
@@ -534,24 +569,18 @@ export function computeRevisionMetrics(schedule, { cofLayers, securityLayers, ha
   const totalMonths = rows.length - 1;
   const tenorYears = totalMonths / 12;
 
-  let csBenefit = 0;
-  if (hasNimComparison) {
-    csBenefit = rows.reduce((s, r) => s + ((r.cof || 0) - (r.securityRate || 0)) * (r.securityAmount || 0) / 12, 0);
-  }
+  // CS Benefit per month = securityBalance * (COF - securityRate) / 12, summed over every row
+  // (0 where no security layer covers, since securityAmount = 0 there).
+  const csBenefit = rows.reduce((s, r) => s + ((r.cof || 0) - (r.securityRate || 0)) * (r.securityAmount || 0) / 12, 0);
   const nii = totalInterest + csBenefit - totalInterestExpense;
   const nim = avgPortfolio > 0 && tenorYears > 0 ? (nii / avgPortfolio) / tenorYears : 0;
-
-  let effectiveRate = 0;
-  if (hasNimComparison) {
-    const avgCof = rows.reduce((s, r) => s + (r.cof || 0), 0) / rows.length;
-    effectiveRate = avgCof + nim;
-  } else {
-    effectiveRate = avgPortfolio > 0 && tenorYears > 0 ? (totalInterest / avgPortfolio) / tenorYears : 0;
-  }
+  // Effective COF = total interest expense / avg portfolio / tenor years; ERR = NIM + effective COF.
+  const effectiveCof = avgPortfolio > 0 && tenorYears > 0 ? (totalInterestExpense / avgPortfolio) / tenorYears : 0;
+  const effectiveRate = nim + effectiveCof;
 
   return {
     effectiveRate, nim, nii,
-    avgPortfolio, totalInterest, totalInterestExpense, csBenefit,
+    avgPortfolio, totalInterest, totalInterestExpense, csBenefit, effectiveCof,
     tenorYears,
   };
 }

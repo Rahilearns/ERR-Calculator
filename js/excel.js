@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260602a';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603a';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -148,6 +148,9 @@ function setCell(ws, addr, value, opts = {}) {
 }
 
 export function downloadVerificationExcel(filename, ctx) {
+  // Rate Revision — Structured has its own column layout (Date, Total COF, CS Balance, CS Benefit).
+  if (ctx.pageType === 'revisionStructured') return downloadRevisionStructuredVerify(filename, ctx);
+
   const wb = XLSX.utils.book_new();
   const { schedule, inputs, metrics, pageTitle, pageType, params = {} } = ctx;
   const cof = params.cofRate || 0;
@@ -438,6 +441,204 @@ export function downloadVerificationExcel(filename, ctx) {
   XLSX.writeFile(wb, filename, { cellStyles: true });
 }
 
+// =====================================================================
+// Verify Calculation Excel — Rate Revision (Structured). Columns:
+//   A Sl | B Date | C Installment | D Interest | E Principal | F URPA
+//   G Total COF | H Int.Expense | I Accrued | J CS Balance | K CS Benefit
+// Mirrors the rectified "Rate_Revision_Structured_*_Rectified Calculation" files.
+// =====================================================================
+function downloadRevisionStructuredVerify(filename, ctx) {
+  const wb = XLSX.utils.book_new();
+  const { schedule, inputs, metrics, pageTitle, params = {} } = ctx;
+  const rows = schedule.rows;
+  const tenor = params.tenorMonths || (rows.length - 1);
+  const mora = params.moratoriumMonths || 0;
+  const pct = (v) => `${+(Number(v) * 100).toFixed(6)}%`; // inline percent literal, e.g. 0.14 -> "14%"
+
+  // ----- Schedule sheet -----
+  const heads = ['Sl.', 'Date', 'Installment', 'Interest', 'Principal', 'URPA',
+                 'Total COF', 'Int. Expense (URPA*COF/12)', 'Accrued Interest', 'CS Balance', 'CS Benefit'];
+  const ws = {};
+  heads.forEach((h, c) => setCell(ws, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
+
+  const RATE = (modality) => (modality === 'EQI' || modality === 'Equal Principal + Interest (Quarterly)') ? 4 : 12;
+  const ppyDiv = RATE(params.paymentModality);
+
+  // Precompute rate-block starts for regular (post-moratorium) payment rows so EMI/EQI can recompute
+  // the installment via PMT(blockRate, remainingPeriods, -balanceAtBlockStart) when the rate changes.
+  // blockStartSl[sl] = the Sl that began the current rate block.
+  const blockStartBySl = {};
+  let curRate = null, curBlockStart = null;
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.sl <= mora) continue;
+    if (r.installment > 0 && ppyDiv === 12) {
+      if (r.rate !== curRate) { curRate = r.rate; curBlockStart = r.sl; }
+      blockStartBySl[r.sl] = curBlockStart;
+    } else if (r.installment > 0) {
+      // quarterly — block on rate change too
+      if (r.rate !== curRate) { curRate = r.rate; curBlockStart = r.sl; }
+      blockStartBySl[r.sl] = curBlockStart;
+    }
+  }
+
+  rows.forEach((r, i) => {
+    const xr = i + 2, pr = xr - 1;
+    const d = new Date(r.date);
+    setCell(ws, `A${xr}`, r.sl, { s: STYLE.cellCenter });
+    setCell(ws, `B${xr}`, 0, { f: `DATE(${d.getFullYear()},${d.getMonth() + 1},${d.getDate()})`, z: 'dd-mmm-yyyy', s: STYLE.cellCenter });
+
+    if (i === 0) {
+      ['C', 'D', 'E'].forEach(c => setCell(ws, `${c}${xr}`, 0, { z: FMT.ACCOUNTING }));
+      setCell(ws, `F${xr}`, 0, { f: `'Inputs & Results'!B5`, z: FMT.ACCOUNTING });
+      setCell(ws, `G${xr}`, num(r.cof), { z: FMT.PCT2 });
+      setCell(ws, `H${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(ws, `I${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
+      setCell(ws, `J${xr}`, num(r.securityAmount || 0), { z: FMT.ACCOUNTING });
+      // CS benefit for disbursement row uses current row's COF + security rate
+      setCell(ws, `K${xr}`, 0, { f: `J${xr}*(G${xr}-${pct(r.securityRate || 0)})/12`, z: FMT.ACCOUNTING });
+      return;
+    }
+
+    const isMora = r.sl <= mora;
+    const isPaymentRow = (r.installment || 0) > 0;
+
+    // D Interest = URPA_prev * lending rate / (12 or 4)
+    if (isMora) {
+      setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/12`, z: FMT.ACCOUNTING });
+    } else if (isPaymentRow) {
+      setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/${ppyDiv}`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(ws, `D${xr}`, 0, { z: FMT.ACCOUNTING });
+    }
+
+    // C Installment & E Principal
+    if (isMora) {
+      // paid month: C = D + E + accrued_prev (E=0). unpaid: C=0.
+      if (isPaymentRow) setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
+      else setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
+    } else if (isPaymentRow) {
+      const bStart = blockStartBySl[r.sl];
+      const bRow = bStart + 1; // Excel row of sl=(bStart-1) holding balance going into the block
+      const periodsExpr = ppyDiv === 12
+        ? `'Inputs & Results'!$B$10-Schedule!$A$${bRow}`
+        : `('Inputs & Results'!$B$10-Schedule!$A$${bRow})/3`;
+      const pmt = `PMT(${pct(r.rate)}/${ppyDiv},${periodsExpr},-Schedule!$F$${bRow},,0)`;
+      setCell(ws, `C${xr}`, 0, { f: `${pmt}+I${pr}`, z: FMT.ACCOUNTING });
+      setCell(ws, `E${xr}`, 0, { f: `C${xr}-D${xr}`, z: FMT.ACCOUNTING });
+    } else {
+      setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
+      setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
+    }
+
+    // F URPA = URPA_prev - Principal
+    setCell(ws, `F${xr}`, 0, { f: `F${pr}-E${xr}`, z: FMT.ACCOUNTING });
+    // G Total COF (value), H Int Expense = URPA_prev * COF / 12
+    setCell(ws, `G${xr}`, num(r.cof), { z: FMT.PCT2 });
+    setCell(ws, `H${xr}`, 0, { f: `F${pr}*G${xr}/12`, z: FMT.ACCOUNTING });
+    // I Accrued
+    setCell(ws, `I${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
+    // J CS Balance, K CS Benefit = balance*(COF - secRate)/12
+    setCell(ws, `J${xr}`, num(r.securityAmount || 0), { z: FMT.ACCOUNTING });
+    setCell(ws, `K${xr}`, 0, { f: `J${xr}*(G${xr}-${pct(r.securityRate || 0)})/12`, z: FMT.ACCOUNTING });
+  });
+
+  const lastDataRow = rows.length + 1;        // 1-indexed
+  const totalRow = rows.length + 2;           // TOTAL row (1-indexed)
+  const tIdx = rows.length + 1;               // 0-indexed for encode_cell
+  setCell(ws, `A${totalRow}`, 'TOTAL', { text: true, s: { font: { bold: true }, alignment: { horizontal: 'center' } } });
+  ['C', 'D', 'E', 'H', 'K'].forEach((col) => {
+    setCell(ws, `${col}${totalRow}`, 0, { f: `SUM(${col}2:${col}${lastDataRow})`, z: FMT.ACCOUNTING, s: { font: { bold: true } } });
+  });
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tIdx, c: 10 } });
+  ws['!cols'] = heads.map((h, c) => ({ wch: c === 0 ? 6 : c === 1 ? 12 : 17 }));
+
+  // ----- Inputs & Results sheet -----
+  const wsI = {};
+  const inputLines = collectInputLinesFor('revisionStructured', inputs);
+  setCell(wsI, 'A1', 'ERR Calculator – Verification', { text: true, s: STYLE.title });
+  setCell(wsI, 'A2', pageTitle, { text: true, s: STYLE.greenHeader });
+  setCell(wsI, 'A4', 'Inputs', { text: true, s: STYLE.greenHeader });
+  setCell(wsI, 'B4', 'Values', { text: true, s: STYLE.greenHeader });
+  const startRow = 5;
+  inputLines.forEach(([label, value], i) => {
+    const r = startRow + i;
+    setCell(wsI, `A${r}`, label, { text: true });
+    const lower = label.toLowerCase();
+    if (lower === 'disbursement date') {
+      const dd = new Date(value);
+      setCell(wsI, `B${r}`, 0, { f: `DATE(${dd.getFullYear()},${dd.getMonth() + 1},${dd.getDate()})`, z: 'dd-mmm-yyyy' });
+    } else if (typeof value === 'number') {
+      const isInt = lower.includes('moratorium period') || lower.includes('loan tenor');
+      setCell(wsI, `B${r}`, value, { z: isInt ? FMT.ACCOUNTING_INT : FMT.ACCOUNTING });
+    } else {
+      setCell(wsI, `B${r}`, String(value || ''), { text: true });
+    }
+  });
+
+  const resHeader = startRow + inputLines.length + 1;
+  setCell(wsI, `A${resHeader}`, 'Results', { text: true, s: STYLE.greenHeader });
+  // tenor cell is B10 (Initial Loan=5 .. Loan Tenor=10)
+  const TENOR_CELL = 'B10';
+  const rRows = [
+    ['Total Interest Received', `Schedule!D${totalRow}`, FMT.ACCOUNTING],
+    ['Total Interest Expense', `Schedule!H${totalRow}`, FMT.ACCOUNTING],
+    ['CS Benefit', `Schedule!K${totalRow}`, FMT.ACCOUNTING],
+    ['Net Interest Income', (ref) => `B${ref.tir}+B${ref.csb}-B${ref.tie}`, FMT.ACCOUNTING],
+    ['Avg Portfolio', `AVERAGE(Schedule!F2:F${lastDataRow - 1})`, FMT.ACCOUNTING],
+    ['NIM', (ref) => `IF(B${ref.avg}*(${TENOR_CELL}/12)=0,0,B${ref.nii}/B${ref.avg}/(${TENOR_CELL}/12))`, FMT.PCT4],
+    ['Effective Rate (ERR)', (ref) => `B${ref.nim}+(B${ref.tie}/B${ref.avg}/${TENOR_CELL}*12)`, FMT.PCT4],
+  ];
+  const keyOrder = ['tir', 'tie', 'csb', 'nii', 'avg', 'nim', 'err'];
+  const ref = {};
+  rRows.forEach((row, i) => {
+    const r = resHeader + 1 + i;
+    ref[keyOrder[i]] = r;
+    setCell(wsI, `A${r}`, row[0], { text: true });
+    const f = typeof row[1] === 'function' ? row[1](ref) : row[1];
+    setCell(wsI, `B${r}`, 0, { f, z: row[2] });
+  });
+  let lastRow = resHeader + rRows.length;
+
+  // ----- Yearly Summary -----
+  const years = Math.ceil((rows.length - 1) / 12);
+  const ySumRow = lastRow + 2;
+  setCell(wsI, `A${ySumRow}`, 'Yearly Summary', { text: true, s: STYLE.greenHeader });
+  const yHeadRow = ySumRow + 1;
+  ['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit', 'Net Interest Income', 'Average Portfolio', 'NIM']
+    .forEach((h, c) => setCell(wsI, XLSX.utils.encode_cell({ r: yHeadRow - 1, c }), h, { text: true, s: STYLE.greenHeader }));
+  for (let y = 1; y <= years; y++) {
+    const yr = yHeadRow + y;
+    const firstSl = (y - 1) * 12 + 1;
+    const lastSl = Math.min(y * 12, rows.length - 1);
+    const dFrom = firstSl + 2, dTo = lastSl + 2;             // interest/expense rows (sl)
+    const kFrom = firstSl + 1, kTo = lastSl + 1;             // CS benefit offset up by one (sl0..)
+    const fFrom = firstSl + 1, fTo = lastSl + 1;             // URPA start-of-month
+    setCell(wsI, `A${yr}`, `Year ${String(y).padStart(2, '0')}`, { text: true, s: STYLE.cellCenter });
+    setCell(wsI, `B${yr}`, 0, { f: `SUM(Schedule!D${dFrom}:D${dTo})`, z: FMT.ACCOUNTING });
+    setCell(wsI, `C${yr}`, 0, { f: `SUM(Schedule!H${dFrom}:H${dTo})`, z: FMT.ACCOUNTING });
+    setCell(wsI, `D${yr}`, 0, { f: `SUM(Schedule!K${kFrom}:K${kTo})`, z: FMT.ACCOUNTING });
+    setCell(wsI, `E${yr}`, 0, { f: `B${yr}+D${yr}-C${yr}`, z: FMT.ACCOUNTING });
+    setCell(wsI, `F${yr}`, 0, { f: `AVERAGE(Schedule!F${fFrom}:F${fTo})`, z: FMT.ACCOUNTING });
+    setCell(wsI, `G${yr}`, 0, { f: `IF(F${yr}=0,0,E${yr}/F${yr})`, z: FMT.PCT4 });
+  }
+  lastRow = yHeadRow + years;
+
+  wsI['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 6 } });
+  wsI['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }];
+  wsI['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    { s: { r: resHeader - 1, c: 0 }, e: { r: resHeader - 1, c: 1 } },
+    { s: { r: ySumRow - 1, c: 0 }, e: { r: ySumRow - 1, c: 6 } },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsI, 'Inputs & Results');
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+  XLSX.writeFile(wb, filename, { cellStyles: true });
+}
+
 // If security type is installment-based, the input csAmount is empty —
 // substitute the model's derived amount stored on metrics (passed as `inp._derived`).
 function securityAmtFor(inp, key) {
@@ -487,8 +688,7 @@ function collectInputLinesFor(pageType, inp) {
       ['Loan Tenor including Moratorium at Disbursement (Months)', inp.tenorMonths ?? 0],
       ['Lending Rate Layers', (inp.rateLayers || []).length + ' layer(s)'],
       ['Loan Security Layers', (inp.securityLayers || []).length + ' layer(s)'],
-      ['Show NIM Comparison?', yesNo(inp.nimComparison)],
-      ['Cost of Fund Layers', (inp.cofLayers || []).length + ' layer(s)'],
+      ['Cost of Fund Layers', (inp.cofRecordCount || 0) + ' record(s)'],
     ];
   }
   // revisionCustomized
@@ -668,6 +868,67 @@ export function readUploadedSchedule(file) {
           });
         }
         if (out.length < 2) return reject(new Error('Uploaded file must contain disbursement row + at least one installment row.'));
+        resolve(out);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// COF Data sample — serve the exact bundled template (preserves Table, Date formula, styling).
+export async function downloadCofSample() {
+  try {
+    const res = await fetch('assets/COF_Data_Sample.xlsx', { cache: 'no-store' });
+    if (!res.ok) throw new Error('sample not found');
+    const blob = await res.blob();
+    saveBlob(blob, 'COF_Data_Sample.xlsx');
+  } catch (err) {
+    alert('Could not load the COF sample file. Make sure assets/COF_Data_Sample.xlsx is deployed.');
+  }
+}
+
+// Read an uploaded COF file → [{ date: 'YYYY-MM-DD', rate }]. Accepts the sample's Table format
+// (Year/Month/Day/Date/COF) or a simple Date/COF sheet.
+export function readUploadedCof(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        // The sample has legend rows above the header; find the header row that contains 'COF'.
+        const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        let headerRow = -1;
+        for (let i = 0; i < grid.length; i++) {
+          const cells = (grid[i] || []).map(c => String(c ?? '').trim().toLowerCase());
+          if (cells.includes('cof')) { headerRow = i; break; }
+        }
+        if (headerRow < 0) return reject(new Error('Could not find a "COF" column in the uploaded file.'));
+        const headers = grid[headerRow].map(c => String(c ?? '').trim().toLowerCase());
+        const col = (name) => headers.indexOf(name);
+        const iYear = col('year'), iMonth = col('month'), iDay = col('day'), iDate = col('date'), iCof = col('cof');
+
+        const out = [];
+        for (let i = headerRow + 1; i < grid.length; i++) {
+          const row = grid[i] || [];
+          const cofRaw = iCof >= 0 ? row[iCof] : null;
+          if (cofRaw === null || cofRaw === undefined || cofRaw === '') continue;
+          let iso = null;
+          if (iYear >= 0 && iMonth >= 0 && iDay >= 0 && row[iYear] && row[iMonth] && row[iDay]) {
+            const y = Number(row[iYear]), mo = Number(row[iMonth]), da = Number(row[iDay]);
+            if (y && mo && da) iso = `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+          }
+          if (!iso && iDate >= 0 && row[iDate]) {
+            const dv = row[iDate];
+            const d = dv instanceof Date ? dv : new Date(dv);
+            if (!isNaN(d)) iso = d.toISOString().slice(0, 10);
+          }
+          if (!iso) continue;
+          out.push({ date: iso, rate: Number(cofRaw) });
+        }
+        if (!out.length) return reject(new Error('No COF records found. Fill the Year/Month/Day and COF columns.'));
         resolve(out);
       } catch (err) { reject(err); }
     };

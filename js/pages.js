@@ -2,19 +2,20 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260602a';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260602a';
+} from './components.js?v=20260603a';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603a';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
-  computeRevisionMetrics, computeRevisionCustomizedMetrics,
-} from './calculations.js?v=20260602a';
-import { formatMoney, formatPercent } from './formatting.js?v=20260602a';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260602a';
+  computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
+} from './calculations.js?v=20260603a';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603a';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603a';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
-} from './excel.js?v=20260602a';
+  downloadCofSample, readUploadedCof,
+} from './excel.js?v=20260603a';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -460,12 +461,16 @@ export function renderRateRevisionStructured(root) {
   });
   const tenorMonths = numberField({ label: 'Loan Tenor at Disbursement (Months)', name: 'tenorMonths', integerOnly: true, min: 1 });
 
+  // Actual loan maturity = disbursement + tenor months − 1 day.
+  // e.g. 01-Jan-2020 + 60 months → 01-Jan-2025, minus 1 day → 31-Dec-2024.
+  // Used only for the last layer's To Date (Lending Rate + Loan Security layers).
   function maturityISO() {
     const d = disbursementDate.getValue();
     const t = tenorMonths.getValue();
     if (!d || !t) return null;
     const dt = new Date(d);
     dt.setMonth(dt.getMonth() + t);
+    dt.setDate(dt.getDate() - 1);
     return dt.toISOString().slice(0, 10);
   }
 
@@ -513,19 +518,29 @@ export function renderRateRevisionStructured(root) {
   }
   tenorMonths.input.addEventListener('input', rerunLayerRules);
 
-  const nimComparison = optionField({ label: 'Want to show NIM margin comparison?', name: 'nimComparison', options: ['No', 'Yes'], value: 'No', onChange: refresh });
-
-  const cofLayers = layeredField({
-    label: 'Cost of Fund Layers',
-    name: 'cofLayers',
-    schema: [
-      { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'toDate', label: 'To Date', type: 'date' },
-      { key: 'cofRate', label: 'COF (COF/ISC + OPEX)', type: 'percent' },
-    ],
-    addLabel: '+ Add COF Layer',
-    initialRows: 0,
+  // COF Data Upload — replaces the old NIM-comparison toggle + COF layers.
+  let cofUploadedRows = null;
+  const cofGetSample = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Get Sample COF Excel');
+  cofGetSample.addEventListener('click', downloadCofSample);
+  const cofFileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
+  const cofUploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload COF Data');
+  cofUploadBtn.addEventListener('click', () => cofFileInput.click());
+  const cofStatus = el('span', { class: 'help' }, 'No COF file uploaded — interest expense will be 0.');
+  cofFileInput.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      cofUploadedRows = await readUploadedCof(f);
+      cofStatus.textContent = `${f.name} — ${cofUploadedRows.length} COF record(s) loaded.`;
+      toast('COF data parsed successfully.', 'success');
+    } catch (err) { cofUploadedRows = null; toast(err.message, 'error'); cofStatus.textContent = 'Upload failed: ' + err.message; }
   });
+  const cofField = el('div', { class: 'field' });
+  const cofLbl = el('label', {}, 'COF Data Upload');
+  cofLbl.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
+  cofField.appendChild(cofLbl);
+  cofField.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' },
+    cofGetSample, cofUploadBtn, cofFileInput, cofStatus));
 
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
@@ -535,9 +550,7 @@ export function renderRateRevisionStructured(root) {
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
   section.appendChild(el('div', { class: 'form-row full' }, rateLayers));
   section.appendChild(el('div', { class: 'form-row full' }, securityLayers));
-  section.appendChild(el('div', { class: 'form-row' }, nimComparison));
-  const cofRow = el('div', { class: 'form-row full' }, cofLayers);
-  section.appendChild(cofRow);
+  section.appendChild(el('div', { class: 'form-row full' }, cofField));
 
   function refresh() {
     const moraYes = moratoriumAvail.getValue() === 'Yes';
@@ -547,7 +560,6 @@ export function renderRateRevisionStructured(root) {
     if (months > 0) idpField.refresh();
     paymentModality.setLabel(moraYes ? 'Payment Modality after Moratorium' : 'Payment Modality');
     tenorMonths.setLabel(moraYes ? 'Loan Tenor including Moratorium at Disbursement (Months)' : 'Loan Tenor at Disbursement (Months)');
-    cofRow.classList.toggle('hidden', nimComparison.getValue() !== 'Yes');
   }
   refresh();
 
@@ -559,19 +571,19 @@ export function renderRateRevisionStructured(root) {
 
   restoreDraft('revisionStructured', {
     initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-    paymentModality, tenorMonths, rateLayers, securityLayers, nimComparison, cofLayers,
+    paymentModality, tenorMonths, rateLayers, securityLayers,
   });
   refresh();
   setTimeout(() => { rateLayers.applyLayerRules(); securityLayers.applyLayerRules(); }, 150);
   attachDraftAutosave('revisionStructured', section, () => collectRevisionStructuredInputs({
     initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-    paymentModality, tenorMonths, rateLayers, securityLayers, nimComparison, cofLayers,
+    paymentModality, tenorMonths, rateLayers, securityLayers,
   }));
 
   calcBtn.addEventListener('click', () => {
     const inputs = collectRevisionStructuredInputs({
       initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-      paymentModality, tenorMonths, rateLayers, securityLayers, nimComparison, cofLayers,
+      paymentModality, tenorMonths, rateLayers, securityLayers,
     });
     if (!inputs.initialAmount) return toast('Enter Initial Loan Amount.', 'error');
     if (!inputs.disbursementDate) return toast('Enter Disbursement Date.', 'error');
@@ -584,6 +596,10 @@ export function renderRateRevisionStructured(root) {
     const lastTo = inputs.rateLayers[inputs.rateLayers.length - 1].toDate;
     if (lastTo > mat) return toast(`Last Lending Rate Layer "To Date" (${lastTo}) exceeds maturity (${mat}).`, 'error');
 
+    // Build COF effective-date data from the uploaded file (0% before first record; cut at maturity).
+    const { cofData, warning } = buildCofData(cofUploadedRows, inputs.disbursementDate, mat);
+    if (warning) toast(warning, 'warn', 6000);
+
     const mora = inputs.moratoriumAvail === 'Yes' ? inputs.moratoriumPeriod : 0;
     const params = {
       initialLoanAmount: inputs.initialAmount,
@@ -594,14 +610,13 @@ export function renderRateRevisionStructured(root) {
       tenorMonths: inputs.tenorMonths,
       rateLayers: inputs.rateLayers,
       securityLayers: inputs.securityLayers,
-      cofLayers: inputs.nimComparison === 'Yes' ? inputs.cofLayers : null,
+      cofData,
+      maturityDate: mat,
     };
     const schedule = buildRateRevisionStructured(params);
-    const metrics = computeRevisionMetrics(schedule, {
-      cofLayers: params.cofLayers, securityLayers: params.securityLayers,
-      hasNimComparison: inputs.nimComparison === 'Yes',
-    });
-    const ctx = { pageType: 'revisionStructured', pageTitle: 'Rate Revision — Structured', inputs, params, schedule, metrics };
+    const metrics = computeRevisionMetrics(schedule);
+    const ctx = { pageType: 'revisionStructured', pageTitle: 'Rate Revision — Structured',
+      inputs: { ...inputs, cofRecordCount: cofData.length }, params, schedule, metrics };
     autoSaveSummary(ctx);
     renderResults(resultsPanel, ctx);
     resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -619,8 +634,6 @@ function collectRevisionStructuredInputs(f) {
     tenorMonths: f.tenorMonths.getValue(),
     rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.toDate && r.activeRate !== null),
     securityLayers: f.securityLayers.getValue().filter(r => r.fromDate && r.toDate && r.amount),
-    nimComparison: f.nimComparison.getValue(),
-    cofLayers: f.cofLayers.getValue().filter(r => r.fromDate && r.toDate && r.cofRate !== null),
   };
 }
 
