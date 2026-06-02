@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260601c';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260602a';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -188,25 +188,25 @@ export function downloadVerificationExcel(filename, ctx) {
   const regularMonthsExpr = TENOR_REF && MORA_REF ? `(${TENOR_REF}-${MORA_REF})` : null;
 
   // Customized Equal-Principal layers: principal is constant within a layer =
-  // (layer-start balance) / (layer periods). The layer-start balance is a real
-  // Schedule cell (URPA of the row just before the layer's first month), so we
-  // can reference it: D = E{layerStartRow} / periods.
-  // Build sl -> { startCell, periods } for every EPI-layer month.
+  // (layer-start balance) / (periods remaining to MATURITY). The layer-start balance and
+  // its Sl are real Schedule cells, so the formula is fully traceable:
+  //   Monthly:   D = E{startRow} / (Tenor - A{startRow})
+  //   Quarterly: D = E{startRow} / ((Tenor - A{startRow}) / 3)
+  // where startRow = Excel row of sl=(from-1) = from+1, A{startRow}=that Sl, E{startRow}=its URPA.
   const epiLayerBySl = {};
-  if (pageType === 'customized' && Array.isArray(inputs.paymentLayers)) {
+  if (pageType === 'customized' && Array.isArray(inputs.paymentLayers) && TENOR_REF) {
     inputs.paymentLayers.forEach((L) => {
       const isQ = L.paymentType === 'Equal Principal + Interest (Quarterly)';
       const isM = L.paymentType === 'Equal Principal + Interest (Monthly)';
       if (!isQ && !isM) return;
       const from = Number(L.fromInstallment), to = Number(L.toInstallment);
       if (!from || !to) return;
-      // Layer-start balance is URPA at sl=from-1 → Excel row (from-1)+2 = from+1
-      const startCell = `E${from + 1}`;
-      let periods = 0;
-      if (isM) periods = to - from + 1;
-      else for (let m = from; m <= to; m++) if (m % 3 === 0) periods++;
-      if (periods < 1) periods = 1;
-      for (let m = from; m <= to; m++) epiLayerBySl[m] = { startCell, periods };
+      const startRow = from + 1; // Excel row of sl=(from-1)
+      const startCell = `E${startRow}`;
+      const slCell = `A${startRow}`;
+      const denom = isQ ? `((${TENOR_REF}-${slCell})/3)` : `(${TENOR_REF}-${slCell})`;
+      const formula = `${startCell}/${denom}`;
+      for (let m = from; m <= to; m++) epiLayerBySl[m] = { formula };
     });
   }
 
@@ -250,8 +250,8 @@ export function downloadVerificationExcel(filename, ctx) {
       const denom = isQuarterly ? `(${regularMonthsExpr}/3)` : regularMonthsExpr;
       setCell(wsSched, `D${xr}`, 0, { f: `${LOAN_REF}/${denom}`, z: FMT.ACCOUNTING });
     } else if (isEPI && epiLayer) {
-      // Customized EPI layer: constant = (layer-start URPA cell) / (layer periods)
-      setCell(wsSched, `D${xr}`, 0, { f: `${epiLayer.startCell}/${epiLayer.periods}`, z: FMT.ACCOUNTING });
+      // Customized EPI layer: constant = (layer-start URPA cell) / (periods remaining to maturity)
+      setCell(wsSched, `D${xr}`, 0, { f: epiLayer.formula, z: FMT.ACCOUNTING });
     } else {
       // EMI / EQI / Custom Principal — use the engine's (already accrued-free) base principal.
       setCell(wsSched, `D${xr}`, num(r.principal), { z: FMT.ACCOUNTING });
@@ -324,6 +324,18 @@ export function downloadVerificationExcel(filename, ctx) {
       setCell(wsInputs, `B${r}`, String(value || ''), { text: true });
     }
   });
+
+  // Funded Security "EMI/EQI after Moratorium": write the security amount as a traced PMT
+  // formula (matches sample B14 = PMT($B$5/12, B9-B8, -B6,,0)).
+  const secKind = String(inputs.fundedSecurityType || '');
+  if (idx.csAmount && RATE_REF && LOAN_REF && TENOR_REF && MORA_REF &&
+      (secKind.startsWith('EMI') || secKind.startsWith('EQI'))) {
+    const nMul = idx.numInst ? `*B${idx.numInst}` : '';
+    const pmt = secKind.startsWith('EQI')
+      ? `PMT(${RATE_REF}/4,(${TENOR_REF}-${MORA_REF})/3,-${LOAN_REF},,0)`
+      : `PMT(${RATE_REF}/12,${TENOR_REF}-${MORA_REF},-${LOAN_REF},,0)`;
+    setCell(wsInputs, `B${idx.csAmount}`, 0, { f: `${pmt}${nMul}`, z: FMT.ACCOUNTING });
+  }
 
   // Results section
   const resHeaderRow = inputStartRow + inputLines.length + 1;
@@ -499,6 +511,7 @@ function inputIndex(lines, start) {
     else if (key.startsWith('loan tenor')) idx.loanTenor = row;
     else if (key.startsWith('moratorium period')) idx.moratoriumPeriod = row;
     else if (key.startsWith('total cof')) idx.totalCof = row;
+    else if (key.startsWith('number of installments')) idx.numInst = row;
     else if (key === 'cash security / fdr amount') idx.csAmount = row;
     else if (key === 'cash security / fdr rate') idx.csRate = row;
   });

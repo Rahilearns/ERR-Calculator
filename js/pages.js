@@ -2,19 +2,19 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260601c';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260601c';
+} from './components.js?v=20260602a';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260602a';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics,
-} from './calculations.js?v=20260601c';
-import { formatMoney, formatPercent } from './formatting.js?v=20260601c';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260601c';
+} from './calculations.js?v=20260602a';
+import { formatMoney, formatPercent } from './formatting.js?v=20260602a';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260602a';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
-} from './excel.js?v=20260601c';
+} from './excel.js?v=20260602a';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -61,8 +61,8 @@ export function renderRegularLoan(root) {
   function securityOptions() {
     const pm = paymentMode.getValue();
     const opts = ['FDR', 'Cash Security'];
-    if (pm === 'EMI') opts.push('EMI');
-    else if (pm === 'EQI') opts.push('EQI');
+    if (pm === 'EMI') opts.push('EMI after Moratorium');
+    else if (pm === 'EQI') opts.push('EQI after Moratorium');
     else opts.push('Installment');
     return opts;
   }
@@ -269,7 +269,7 @@ export function renderCustomizedLoan(root) {
   const totalCof = percentField({ label: 'Total Cost of Fund [COF/ISC + OPEX]', name: 'totalCof' });
   const fundedSecurityType = optionField({
     label: 'Funded Security Type', name: 'fundedSecurityType',
-    options: ['FDR', 'Cash Security', 'EMI', 'EQI'], value: 'FDR', onChange: refresh,
+    options: ['FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: 'FDR', onChange: refresh,
   });
   const csAmount = numberField({ label: 'Cash Security / FDR Amount', name: 'csAmount' });
   const csRate = percentField({ label: 'Cash Security / FDR Rate', name: 'csRate' });
@@ -770,9 +770,9 @@ function renderResults(panel, ctx) {
   grid.appendChild(metric('Effective Rate (ERR)', formatPercent(m.effectiveRate), true));
   grid.appendChild(metric('NIM', formatPercent(m.nim)));
   grid.appendChild(metric('Net Interest Income', formatMoney(m.nii)));
-  // If model derived a security amount (EMI/EQI/Installment type), show it for transparency
-  const sk = ctx.inputs.fundedSecurityType;
-  if ((sk === 'EMI' || sk === 'EQI' || sk === 'Installment') && m.derivedSecurityAmount > 0) {
+  // If model derived a security amount (EMI/EQI after Moratorium / Installment), show it for transparency
+  const sk = String(ctx.inputs.fundedSecurityType || '');
+  if ((sk.startsWith('EMI') || sk.startsWith('EQI') || sk === 'Installment') && m.derivedSecurityAmount > 0) {
     grid.appendChild(metric(
       `Security Amount (${sk} × ${ctx.inputs.numInst || 1})`,
       formatMoney(m.derivedSecurityAmount)
