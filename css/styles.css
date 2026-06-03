@@ -287,6 +287,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   padding: 0;
 }
 
+/* Smart-shaped bordered sub-section — groups a layered field / upload block
+   in a distinct rounded, bordered container with breathing room around it. */
+.sub-card {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px 18px 18px;
+  margin: 20px 0;
+  background: var(--bg-soft);
+  box-shadow: var(--shadow);
+}
+.sub-card > :first-child { margin-top: 0; }
+.sub-card > :last-child { margin-bottom: 0; }
+.sub-card .layered-field > .layer-head,
+.sub-card > .field > label { margin-top: 0; }
+
 /* ---------- Calculation page ---------- */
 .page-title {
   display: flex;

@@ -2,20 +2,20 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603e';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603e';
+} from './components.js?v=20260603f';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603f';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603e';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603e';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603e';
+} from './calculations.js?v=20260603f';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603f';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603f';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
-} from './excel.js?v=20260603e';
+} from './excel.js?v=20260603f';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -83,11 +83,25 @@ export function renderRegularLoan(root) {
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor, paymentMode));
   section.appendChild(el('div', { class: 'form-row' }, totalCof, fundedSecurityType));
-  // CS Amount and Rate — equal width 2 column row when FDR/CS; Number of Installments takes own full row otherwise
-  const secRow = el('div', { class: 'form-row' }, csAmount, csRate);
-  const numInstRow = el('div', { class: 'form-row full' }, numInst);
-  section.appendChild(secRow);
-  section.appendChild(numInstRow);
+  // Security detail row — fields depend on Funded Security Type (rebuilt in refresh()):
+  //   FDR / Cash Security       -> Cash Security / FDR Amount + Cash Security / FDR Rate
+  //   EMI/EQI after Moratorium  -> Number of Installments + Funded Security Rate
+  //   Installment               -> Number of Installments
+  const secDetailRow = el('div', { class: 'form-row' });
+  section.appendChild(secDetailRow);
+  function rebuildSecurityRow() {
+    const t = fundedSecurityType.getValue();
+    secDetailRow.innerHTML = '';
+    if (t === 'FDR' || t === 'Cash Security') {
+      csRate.setLabel('Cash Security / FDR Rate');
+      secDetailRow.append(csAmount, csRate);
+    } else if (t === 'EMI after Moratorium' || t === 'EQI after Moratorium') {
+      csRate.setLabel('Funded Security Rate');
+      secDetailRow.append(numInst, csRate);
+    } else {
+      secDetailRow.append(numInst);
+    }
+  }
 
   function refresh() {
     const moraYes = moratoriumAvail.getValue() === 'Yes';
@@ -100,10 +114,7 @@ export function renderRegularLoan(root) {
     loanTenor.setLabel(moraYes ? 'Loan Tenor including Moratorium (Months)' : 'Loan Tenor (Months)');
 
     fundedSecurityType.setOptions(securityOptions());
-    const secType = fundedSecurityType.getValue();
-    const showCs = (secType === 'FDR' || secType === 'Cash Security');
-    secRow.classList.toggle('hidden', !showCs);
-    numInstRow.classList.toggle('hidden', showCs);
+    rebuildSecurityRow();
   }
   refresh();
 
@@ -141,7 +152,8 @@ export function renderRegularLoan(root) {
       idpFlags: inputs.idpFlags,
       cofRate: inputs.totalCof,
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
-      securityRate: isCs ? (inputs.csRate || 0) : 0,
+      // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
+      securityRate: inputs.fundedSecurityType === 'Installment' ? 0 : (inputs.csRate || 0),
       securityKind: inputs.fundedSecurityType,
       numInst: inputs.numInst,
     };
@@ -284,12 +296,24 @@ export function renderCustomizedLoan(root) {
   moraSection.appendChild(idpField);
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor));
-  section.appendChild(el('div', { class: 'form-row full' }, paymentLayers));
+  section.appendChild(el('div', { class: 'sub-card' }, paymentLayers));
   section.appendChild(el('div', { class: 'form-row' }, totalCof, fundedSecurityType));
-  const secRow = el('div', { class: 'form-row' }, csAmount, csRate);
-  const numInstRow = el('div', { class: 'form-row full' }, numInst);
-  section.appendChild(secRow);
-  section.appendChild(numInstRow);
+  // Security detail row — depends on Funded Security Type (rebuilt in refresh()).
+  const secDetailRow = el('div', { class: 'form-row' });
+  section.appendChild(secDetailRow);
+  function rebuildSecurityRow() {
+    const t = fundedSecurityType.getValue();
+    secDetailRow.innerHTML = '';
+    if (t === 'FDR' || t === 'Cash Security') {
+      csRate.setLabel('Cash Security / FDR Rate');
+      secDetailRow.append(csAmount, csRate);
+    } else if (t === 'EMI after Moratorium' || t === 'EQI after Moratorium') {
+      csRate.setLabel('Funded Security Rate');
+      secDetailRow.append(numInst, csRate);
+    } else {
+      secDetailRow.append(numInst);
+    }
+  }
 
   function refresh() {
     const moraYes = moratoriumAvail.getValue() === 'Yes';
@@ -298,10 +322,7 @@ export function renderCustomizedLoan(root) {
     moraSection.classList.toggle('hidden', months === 0);
     if (months > 0) idpField.refresh();
     loanTenor.setLabel(moraYes ? 'Loan Tenor including Moratorium (Months)' : 'Loan Tenor (Months)');
-    const secType = fundedSecurityType.getValue();
-    const showCs = (secType === 'FDR' || secType === 'Cash Security');
-    secRow.classList.toggle('hidden', !showCs);
-    numInstRow.classList.toggle('hidden', showCs);
+    rebuildSecurityRow();
   }
   refresh();
 
@@ -344,7 +365,8 @@ export function renderCustomizedLoan(root) {
     const metrics = computeMetrics(schedule, {
       ...params, paymentMode: 'EMI',
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
-      securityRate: isCs ? (inputs.csRate || 0) : 0,
+      // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
+      securityRate: inputs.fundedSecurityType === 'Installment' ? 0 : (inputs.csRate || 0),
       securityKind: inputs.fundedSecurityType,
       numInst: inputs.numInst,
     });

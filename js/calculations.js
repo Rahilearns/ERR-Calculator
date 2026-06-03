@@ -366,7 +366,8 @@ export function computeMetrics(schedule, params) {
       unitInstallment = schedule.baseInstallment;
     }
     securityAmount = unitInstallment * (numInst || 1);
-    securityRate = 0;
+    // securityRate keeps the passed value — the "Funded Security Rate" for EMI/EQI after
+    // Moratorium (0 for plain "Installment", which has no rate field).
   }
 
   // Avg portfolio = avg of URPA at start of each month (rows 0..N-1)
