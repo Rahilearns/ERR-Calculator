@@ -841,6 +841,7 @@ table.schedule th {
   z-index: 200;
 }
 .toast {
+  position: relative;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -851,26 +852,34 @@ table.schedule th {
   min-width: 220px;
   max-width: 360px;
   animation: toastIn 0.18s ease;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  overflow: visible;
 }
 .toast.success { border-color: var(--accent); }
 .toast.error { border-color: var(--danger); }
 .toast.warn { border-color: var(--warn); }
-.toast-msg { flex: 1; }
+.toast-msg { display: block; }
+/* Close badge sits at the top-right corner, overlapping the box edge (half out / half in)
+   so it never covers the message text. */
 .toast-close {
-  background: none;
-  border: none;
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong, var(--border));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
   color: var(--text-mute);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
   padding: 0;
-  margin: -2px -4px 0 0;
-  flex: 0 0 auto;
 }
-.toast-close:hover { color: var(--text); }
+.toast-close:hover { color: var(--text); background: var(--bg); }
 
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(6px); }
