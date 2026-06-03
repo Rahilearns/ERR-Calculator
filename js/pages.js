@@ -2,20 +2,20 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603d';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603d';
+} from './components.js?v=20260603e';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603e';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603d';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603d';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603d';
+} from './calculations.js?v=20260603e';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603e';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603e';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
-} from './excel.js?v=20260603d';
+} from './excel.js?v=20260603e';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -217,11 +217,13 @@ export function renderCustomizedLoan(root) {
     for (let i = mora + 1; i <= tenor; i++) arr.push({ value: String(i), label: `Month ${String(i).padStart(2, '0')}` });
     return arr;
   }
+  // From and To share the same month list (mora+1 .. tenor) — mirrors the Lending Rate Layers
+  // in Rate Revision — Structured. The last layer's To auto-defaults to the final month (the
+  // universal cascade engine fills it from getMaturity) and stays editable.
   function toOptions() {
     const tenor = loanTenor.getValue() || 0;
     const mora = moratoriumAvail.getValue() === 'Yes' ? (moratoriumPeriod.getValue() || 0) : 0;
     const arr = [];
-    if (tenor) arr.push({ value: 'LAST', label: `Last Month (Month ${String(tenor).padStart(2, '0')})` });
     for (let i = mora + 1; i <= tenor; i++) arr.push({ value: String(i), label: `Month ${String(i).padStart(2, '0')}` });
     return arr;
   }
