@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603h';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603i';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -766,6 +766,47 @@ function inputIndex(lines, start) {
   return idx;
 }
 
+// Yearly Summary rows from a schedule — mirrors the Calculation Verification Excel:
+// Income/Expense over months sl=firstSl..lastSl; Avg Portfolio + Loan Security Benefit over the
+// start-of-month window sl=firstSl-1..lastSl-1; NIM = NII/AvgPort; YoY ERR = (Expense/AvgPort)+NIM.
+function computeYearlySummary(ctx) {
+  const rows = (ctx.schedule && ctx.schedule.rows) || [];
+  if (rows.length < 2) return [];
+  const m = ctx.metrics || {}, inp = ctx.inputs || {}, params = ctx.params || {};
+  const isRevision = ctx.pageType === 'revisionStructured' || ctx.pageType === 'revisionCustomized';
+  const cofRate = params.cofRate != null ? params.cofRate : (inp.totalCof || 0);
+  const secAmt = m.derivedSecurityAmount != null ? m.derivedSecurityAmount : (inp.csAmount || 0);
+  const secRate = m.derivedSecurityRate != null ? m.derivedSecurityRate : (inp.csRate || 0);
+
+  // Per-row interest expense + CS benefit (units = per month).
+  const per = rows.map((r, i) => {
+    const prevUrpa = i > 0 ? (rows[i - 1].urpa || 0) : (r.urpa || 0);
+    const intExp = isRevision ? (r.interestExpense || 0) : (i > 0 ? prevUrpa * cofRate / 12 : 0);
+    const csBen = isRevision
+      ? ((r.cof || 0) - (r.securityRate || 0)) * (r.securityAmount || 0) / 12
+      : (cofRate - secRate) * secAmt / 12;
+    return { interest: r.interest || 0, intExp, csBen, urpa: r.urpa || 0 };
+  });
+
+  const totalMonths = rows.length - 1;
+  const years = Math.ceil(totalMonths / 12);
+  const out = [];
+  for (let y = 0; y < years; y++) {
+    const firstSl = y * 12 + 1, lastSl = Math.min((y + 1) * 12, totalMonths);
+    let income = 0, expense = 0, lsBen = 0, urpaSum = 0, urpaN = 0;
+    for (let sl = firstSl; sl <= lastSl; sl++) {
+      if (per[sl]) { income += per[sl].interest; expense += per[sl].intExp; }
+      if (per[sl - 1]) { lsBen += per[sl - 1].csBen; urpaSum += per[sl - 1].urpa; urpaN++; }
+    }
+    const avgPort = urpaN ? urpaSum / urpaN : 0;
+    const nii = income + lsBen - expense;
+    const nim = avgPort ? nii / avgPort : 0;
+    const yoyErr = avgPort ? (expense / avgPort) + nim : 0;
+    out.push({ year: y + 1, income, expense, lsBen, nii, avgPort, nim, yoyErr });
+  }
+  return out;
+}
+
 // =====================================================================
 // Download Report — PDF with inputs + results + schedule (replication-ready)
 // =====================================================================
@@ -783,6 +824,11 @@ export function downloadReportPDF(filename, ctx) {
   doc.setFontSize(12); doc.setFont(undefined, 'bold');
   doc.text('Inputs', 40, y); y += 10;
   const inputLines = collectInputLinesFor(ctx.pageType, ctx.inputs);
+  // Rename "Payment Mode" / "Payment Modality" → "Payment After Moratorium" when moratorium exists.
+  const reportMora = ctx.inputs.moratoriumAvail === 'Yes' || (Number(ctx.inputs.moratoriumPeriod) || 0) > 0;
+  if (reportMora) inputLines.forEach((line) => {
+    if (line[0] === 'Payment Mode' || line[0] === 'Payment Modality') line[0] = 'Payment After Moratorium';
+  });
   // Add layer detail
   const extras = [];
   if (Array.isArray(ctx.inputs.paymentLayers)) {
@@ -851,22 +897,45 @@ export function downloadReportPDF(filename, ctx) {
   });
   y = doc.lastAutoTable.finalY + 18;
 
+  // Yearly Summary — same table as the Calculation Verification Excel.
+  const ySummary = computeYearlySummary(ctx);
+  if (ySummary.length) {
+    doc.setFont(undefined, 'bold'); doc.setFontSize(12);
+    doc.text('Yearly Summary', 40, y); y += 10;
+    doc.autoTable({
+      head: [['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit', 'Net Interest Income', 'Average Portfolio', 'NIM', 'YoY ERR']],
+      body: ySummary.map(r => [
+        `Year ${String(r.year).padStart(2, '0')}`,
+        fmtM(r.income), fmtM(r.expense), fmtM(r.lsBen), fmtM(r.nii), fmtM(r.avgPort), fmtP(r.nim), fmtP(r.yoyErr),
+      ]),
+      startY: y,
+      styles: { fontSize: 7, cellPadding: 3, halign: 'center', valign: 'middle' },
+      headStyles: { fillColor: [0, 176, 80], textColor: 255, halign: 'center' },
+      margin: { left: 40, right: 40 },
+    });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
   // Schedule
   doc.setFont(undefined, 'bold'); doc.setFontSize(12);
   doc.text('Amortization Schedule', 40, y); y += 10;
   const hasDate = ctx.schedule.rows[0]?.date !== undefined;
   const headers = ['Sl.', ...(hasDate ? ['Date'] : []), 'Installment', 'Interest', 'Principal', 'URPA'];
+  let tInst = 0, tInt = 0, tPrin = 0;
   const body = ctx.schedule.rows.map(r => {
     const row = [String(r.sl)];
     if (hasDate) row.push(r.date || '');
     row.push(fmtM(r.installment), fmtM(r.interest), fmtM(r.principal), fmtM(r.urpa));
+    tInst += Number(r.installment) || 0; tInt += Number(r.interest) || 0; tPrin += Number(r.principal) || 0;
     return row;
   });
+  const schedFoot = ['Total', ...(hasDate ? [''] : []), fmtM(tInst), fmtM(tInt), fmtM(tPrin), ''];
   doc.autoTable({
-    head: [headers], body,
+    head: [headers], body, foot: [schedFoot],
     startY: y,
-    styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+    styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle' },
     headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center' },
+    footStyles: { fillColor: [230, 235, 255], textColor: 20, fontStyle: 'bold', halign: 'center' },
     margin: { left: 40, right: 40 },
   });
 
