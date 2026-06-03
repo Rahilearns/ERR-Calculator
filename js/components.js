@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603g';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603h';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -523,7 +523,8 @@ export function layeredField(opts) {
   }
 
   function rowsComplete() {
-    if (!cascadingFromKey || !cascadingToKey) return true;
+    if (!cascadingFromKey) return true;
+    if (!cascadingToKey) return rows.every((r) => readVal(r.inputs[cascadingFromKey], fromKind) != null);
     return rows.every((r) =>
       readVal(r.inputs[cascadingFromKey], fromKind) != null &&
       readVal(r.inputs[cascadingToKey], toKind) != null
@@ -531,53 +532,71 @@ export function layeredField(opts) {
   }
   function canAddNew() {
     if (rows.length === 0) return true;
-    if (!cascadingFromKey || !cascadingToKey) return true;
+    if (!cascadingFromKey) return true;
     if (!rowsComplete()) return false;
-    const lastTo = readVal(rows[rows.length - 1].inputs[cascadingToKey], toKind);
     const maturity = getMaturityValue();
+    if (!cascadingToKey) {
+      // from-only: can add while the last From is before maturity
+      const lastFrom = readVal(rows[rows.length - 1].inputs[cascadingFromKey], fromKind);
+      if (lastFrom && maturity && lastFrom >= maturity) return false;
+      return true;
+    }
+    const lastTo = readVal(rows[rows.length - 1].inputs[cascadingToKey], toKind);
     if (lastTo && maturity && lastTo >= maturity) return false;
     return true;
   }
 
   function applyLayerRules() {
-    if (!cascadingFromKey || !cascadingToKey) return;
+    if (!cascadingFromKey) return;
     const maturity = getMaturityValue();
     const anchor = getAnchor ? (getAnchor()?.value || null) : null;
+    // From-only mode (no To column): a layer runs from its From until the day/month before the
+    // next layer's From (the last layer extends to maturity). Used by Rate Revision layers.
+    const fromOnly = !cascadingToKey;
 
     // Every field stays enabled (editable). Derived fields are AUTO-FILLED unless the
     // user has manually edited that specific cell (tracked via dataset.userSet, which is
     // only set by a genuine flatpickr/user change — never by programmatic setVal).
     rows.forEach((r, i) => {
       const fromInp = r.inputs[cascadingFromKey];
-      const toInp = r.inputs[cascadingToKey];
+      const toInp = cascadingToKey ? r.inputs[cascadingToKey] : null;
       r.errors.clear();
-      [fromInp, toInp].forEach(inp => inp?.classList.remove('field-error'));
+      [fromInp, toInp].forEach(inp => inp && inp.classList.remove('field-error'));
 
       // FROM
       if (fromInp && fromInp.dataset.userSet !== '1') {
         if (i === 0) {
           // First row anchored to the external source (e.g. disbursement date / mora+1 month)
           setVal(fromInp, anchor, fromKind);
-        } else {
-          // Subsequent rows cascade from the previous row's To + 1 unit (cleared if prev To empty)
+        } else if (!fromOnly) {
+          // To-mode: cascade from the previous row's To + 1 unit (cleared if prev To empty)
           const prevTo = readVal(rows[i - 1].inputs[cascadingToKey], toKind);
           setVal(fromInp, prevTo ? advanceOne(prevTo, fromKind) : null, fromKind);
         }
+        // from-only: each subsequent From is user-entered (no auto-fill).
       }
 
       // TO — only the LAST row auto-defaults to maturity (when not user-edited).
-      // Non-last To is fully user-controlled (that's the field a user shortens to add a layer).
-      const isLast = i === rows.length - 1;
-      if (isLast && toInp && toInp.dataset.userSet !== '1') {
-        setVal(toInp, maturity, toKind);
+      if (!fromOnly) {
+        const isLast = i === rows.length - 1;
+        if (isLast && toInp && toInp.dataset.userSet !== '1') setVal(toInp, maturity, toKind);
       }
     });
 
     // Validate logical consistency
     rows.forEach((r, i) => {
       const fromInp = r.inputs[cascadingFromKey];
-      const toInp = r.inputs[cascadingToKey];
       const fv = readVal(fromInp, fromKind);
+      if (fromOnly) {
+        // Each From strictly increasing; every From (incl. the final layer) must be before maturity.
+        if (fv && maturity && fv >= maturity) flagError(fromInp, r);
+        if (i > 0) {
+          const prevFrom = readVal(rows[i - 1].inputs[cascadingFromKey], fromKind);
+          if (prevFrom && fv && fv <= prevFrom) flagError(fromInp, r);
+        }
+        return;
+      }
+      const toInp = r.inputs[cascadingToKey];
       const tv = readVal(toInp, toKind);
       const isLast = i === rows.length - 1;
 

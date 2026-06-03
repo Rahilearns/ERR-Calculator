@@ -452,15 +452,18 @@ export function buildRateRevisionStructured(p) {
     }
     return result;
   }
-  // Security amount/rate effective on a date = the layer covering that exact date (NOT lagged).
+  // Security amount/rate effective on a date = the LAST layer whose fromDate <= date
+  // (applies until the next layer's From; the last layer extends to maturity). Not lagged.
   function getSecurityOn(dateStr) {
     if (!securityLayers || !securityLayers.length) return { amount: 0, rate: 0 };
+    let result = { amount: 0, rate: 0 };
+    let bestFrom = null;
     for (const r of securityLayers) {
-      if (r.fromDate && r.toDate && dateStr >= r.fromDate && dateStr <= r.toDate) {
-        return { amount: r.amount || 0, rate: r.activeRate || 0 };
+      if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
+        bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
       }
     }
-    return { amount: 0, rate: 0 };
+    return result;
   }
 
   const rows = [];
@@ -622,10 +625,13 @@ export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers 
       return result;
     };
     const getSecOn = (dateStr) => {
+      // Last security layer whose From <= date (applies until the next layer's From / maturity).
+      let result = { amount: 0, rate: 0 }, bestFrom = null;
       for (const r of (securityLayers || []))
-        if (r.fromDate && r.toDate && dateStr >= r.fromDate && dateStr <= r.toDate)
-          return { amount: r.amount || 0, rate: r.activeRate || 0 };
-      return { amount: 0, rate: 0 };
+        if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
+          bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
+        }
+      return result;
     };
     for (let i = 1; i < rows.length; i++) {
       const prev = rows[i - 1];

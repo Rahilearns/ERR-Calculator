@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603g';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603h';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -936,48 +936,103 @@ export async function downloadCofSample() {
   }
 }
 
-// Read an uploaded COF file → [{ date: 'YYYY-MM-DD', rate }]. Accepts the sample's Table format
-// (Year/Month/Day/Date/COF) or a simple Date/COF sheet.
+// Parse a COF worksheet grid → [{ date:'YYYY-MM-DD', rate }] from a Year/Month/Day/Date/COF
+// table (legend rows above the header are skipped). Returns [] if no COF column is found.
+function parseCofGrid(ws) {
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  let headerRow = -1;
+  for (let i = 0; i < grid.length; i++) {
+    const cells = (grid[i] || []).map(c => String(c ?? '').trim().toLowerCase());
+    if (cells.includes('cof')) { headerRow = i; break; }
+  }
+  if (headerRow < 0) return [];
+  const headers = grid[headerRow].map(c => String(c ?? '').trim().toLowerCase());
+  const col = (name) => headers.indexOf(name);
+  const iYear = col('year'), iMonth = col('month'), iDay = col('day'), iDate = col('date'), iCof = col('cof');
+  const out = [];
+  for (let i = headerRow + 1; i < grid.length; i++) {
+    const row = grid[i] || [];
+    const cofRaw = iCof >= 0 ? row[iCof] : null;
+    if (cofRaw === null || cofRaw === undefined || cofRaw === '') continue;
+    let iso = null;
+    if (iYear >= 0 && iMonth >= 0 && iDay >= 0 && row[iYear] && row[iMonth] && row[iDay]) {
+      const y = Number(row[iYear]), mo = Number(row[iMonth]), da = Number(row[iDay]);
+      if (y && mo && da) iso = `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+    }
+    if (!iso && iDate >= 0 && row[iDate]) {
+      const dv = row[iDate];
+      const d = dv instanceof Date ? dv : new Date(dv);
+      if (!isNaN(d)) iso = d.toISOString().slice(0, 10);
+    }
+    if (!iso) continue;
+    out.push({ date: iso, rate: Number(cofRaw) });
+  }
+  return out;
+}
+
+// Read an uploaded COF file → [{ date:'YYYY-MM-DD', rate }] (first sheet).
 export function readUploadedCof(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array', cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        // The sample has legend rows above the header; find the header row that contains 'COF'.
-        const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-        let headerRow = -1;
-        for (let i = 0; i < grid.length; i++) {
-          const cells = (grid[i] || []).map(c => String(c ?? '').trim().toLowerCase());
-          if (cells.includes('cof')) { headerRow = i; break; }
-        }
-        if (headerRow < 0) return reject(new Error('Could not find a "COF" column in the uploaded file.'));
-        const headers = grid[headerRow].map(c => String(c ?? '').trim().toLowerCase());
-        const col = (name) => headers.indexOf(name);
-        const iYear = col('year'), iMonth = col('month'), iDay = col('day'), iDate = col('date'), iCof = col('cof');
-
-        const out = [];
-        for (let i = headerRow + 1; i < grid.length; i++) {
-          const row = grid[i] || [];
-          const cofRaw = iCof >= 0 ? row[iCof] : null;
-          if (cofRaw === null || cofRaw === undefined || cofRaw === '') continue;
-          let iso = null;
-          if (iYear >= 0 && iMonth >= 0 && iDay >= 0 && row[iYear] && row[iMonth] && row[iDay]) {
-            const y = Number(row[iYear]), mo = Number(row[iMonth]), da = Number(row[iDay]);
-            if (y && mo && da) iso = `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
-          }
-          if (!iso && iDate >= 0 && row[iDate]) {
-            const dv = row[iDate];
-            const d = dv instanceof Date ? dv : new Date(dv);
-            if (!isNaN(d)) iso = d.toISOString().slice(0, 10);
-          }
-          if (!iso) continue;
-          out.push({ date: iso, rate: Number(cofRaw) });
-        }
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        const out = parseCofGrid(wb.Sheets[wb.SheetNames[0]]);
         if (!out.length) return reject(new Error('No COF records found. Fill the Year/Month/Day and COF columns.'));
         resolve(out);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Download the combined Rate Revision — Customized template (Schedule + COF Layers sheets).
+export async function downloadCustomizedRevisionSample() {
+  try {
+    const res = await fetch('assets/Sample for customized rate revision.xlsx', { cache: 'no-store' });
+    if (!res.ok) throw new Error('sample not found');
+    saveBlob(await res.blob(), 'Sample for customized rate revision.xlsx');
+  } catch (err) {
+    alert('Could not load the sample file. Make sure "assets/Sample for customized rate revision.xlsx" is deployed.');
+  }
+}
+
+// Read the combined Rate Revision — Customized file → { scheduleRows, cofRows }.
+// Amortization comes from the 'Schedule' sheet; COF from the 'COF Layers' sheet.
+export function readCustomizedRevisionFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        const byName = (re) => { const n = wb.SheetNames.find(nm => re.test(nm)); return n ? wb.Sheets[n] : null; };
+        const hasHeader = (ws, h) => ((XLSX.utils.sheet_to_json(ws, { header: 1, defval: null })[0] || [])
+          .map(c => String(c ?? '').trim().toLowerCase()).includes(h));
+        let schedWs = byName(/schedule|amort/i)
+          || wb.SheetNames.map(n => wb.Sheets[n]).find(ws => hasHeader(ws, 'urpa'));
+        if (!schedWs) return reject(new Error('Could not find the amortization Schedule sheet (Date / Installment / Interest / Principal / URPA).'));
+        const numv = v => Number(String(v ?? '').replace(/,/g, '')) || 0;
+        const json = XLSX.utils.sheet_to_json(schedWs, { defval: null });
+        const scheduleRows = [];
+        for (const r of json) {
+          const date = r['Date'] ?? r['date'];
+          if (!date) continue;
+          let dateStr;
+          if (date instanceof Date) dateStr = date.toISOString().slice(0, 10);
+          else { const d = new Date(date); if (isNaN(d)) continue; dateStr = d.toISOString().slice(0, 10); }
+          scheduleRows.push({
+            date: dateStr,
+            installmentAmount: numv(r['Installment Amount'] ?? r['Installment'] ?? r['installment']),
+            interestAmount: numv(r['Interest Amount'] ?? r['Interest'] ?? r['interest']),
+            principalAmount: numv(r['Principal Amount'] ?? r['Principal'] ?? r['principal']),
+            urpa: numv(r['URPA'] ?? r['urpa']),
+          });
+        }
+        if (scheduleRows.length < 2) return reject(new Error('The Schedule sheet needs a disbursement row + at least one installment row.'));
+        const cofWs = byName(/cof/i);
+        const cofRows = cofWs ? parseCofGrid(cofWs) : [];
+        resolve({ scheduleRows, cofRows });
       } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(new Error('Failed to read file.'));

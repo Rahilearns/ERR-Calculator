@@ -2,20 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603g';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603g';
+} from './components.js?v=20260603h';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603h';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603g';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603g';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603g';
+} from './calculations.js?v=20260603h';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603h';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603h';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
-} from './excel.js?v=20260603g';
+  downloadCustomizedRevisionSample, readCustomizedRevisionFile,
+} from './excel.js?v=20260603h';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -498,19 +499,19 @@ export function renderRateRevisionStructured(root) {
     return dt.toISOString().slice(0, 10);
   }
 
+  // From-only layers: each layer's rate/security applies from its From Date until the day
+  // before the next layer's From (the final layer extends to maturity). No To Date field.
   const rateLayers = layeredField({
     label: 'Lending Rate Layers',
     name: 'rateLayers',
     schema: [
       { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'toDate', label: 'To Date', type: 'date' },
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     addLabel: '+ Add Lending Rate Layer',
     minRows: 2,
     initialRows: 2,
     cascadingFromKey: 'fromDate',
-    cascadingToKey: 'toDate',
     getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
     getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
   });
@@ -520,7 +521,6 @@ export function renderRateRevisionStructured(root) {
     name: 'securityLayers',
     schema: [
       { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'toDate', label: 'To Date', type: 'date' },
       { key: 'amount', label: 'Amount', type: 'number' },
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
@@ -528,7 +528,6 @@ export function renderRateRevisionStructured(root) {
     minRows: 1,
     initialRows: 1,
     cascadingFromKey: 'fromDate',
-    cascadingToKey: 'toDate',
     getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
     getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
   });
@@ -552,9 +551,9 @@ export function renderRateRevisionStructured(root) {
   moraSection.appendChild(idpField);
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
-  section.appendChild(el('div', { class: 'form-row full' }, rateLayers));
-  section.appendChild(el('div', { class: 'form-row full' }, securityLayers));
-  section.appendChild(el('div', { class: 'form-row full' }, cofField));
+  section.appendChild(el('div', { class: 'sub-card' }, rateLayers));
+  section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
+  section.appendChild(el('div', { class: 'sub-card' }, cofField));
 
   function refresh() {
     const moraYes = moratoriumAvail.getValue() === 'Yes';
@@ -597,8 +596,12 @@ export function renderRateRevisionStructured(root) {
     if (!inputs.rateLayers.length) return toast('Add at least one Lending Rate Layer.', 'error');
 
     const mat = maturityISO();
-    const lastTo = inputs.rateLayers[inputs.rateLayers.length - 1].toDate;
-    if (lastTo > mat) return toast(`Last Lending Rate Layer "To Date" (${lastTo}) exceeds maturity (${mat}).`, 'error');
+    const lastRateFrom = inputs.rateLayers[inputs.rateLayers.length - 1].fromDate;
+    if (lastRateFrom && mat && lastRateFrom >= mat) return toast(`The last Lending Rate Layer's From Date (${lastRateFrom}) must be earlier than loan maturity (${mat}).`, 'error');
+    if (inputs.securityLayers.length) {
+      const lastSecFrom = inputs.securityLayers[inputs.securityLayers.length - 1].fromDate;
+      if (lastSecFrom && mat && lastSecFrom >= mat) return toast(`The last Loan Security Layer's From Date (${lastSecFrom}) must be earlier than loan maturity (${mat}).`, 'error');
+    }
 
     // Build COF effective-date data from the uploaded file (0% before first record; cut at maturity).
     const { cofData, warning } = buildCofData(cofUpload.getRows(), inputs.disbursementDate, mat);
@@ -636,8 +639,8 @@ function collectRevisionStructuredInputs(f) {
     idpFlags: f.idpField.getValue(),
     paymentModality: f.paymentModality.getValue(),
     tenorMonths: f.tenorMonths.getValue(),
-    rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.toDate && r.activeRate !== null),
-    securityLayers: f.securityLayers.getValue().filter(r => r.fromDate && r.toDate && r.amount),
+    rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.activeRate !== null),
+    securityLayers: f.securityLayers.getValue().filter(r => r.fromDate && r.amount),
   };
 }
 
@@ -649,48 +652,48 @@ export function renderRateRevisionCustomized(root) {
   root.appendChild(pageTitle('Rate Revision — Customized'));
 
   const section = el('div', { class: 'section-card' });
-  section.appendChild(el('h2', {}, 'Upload Amortization Schedule'));
+  section.appendChild(el('h2', {}, 'Upload Amortization Schedule and COF Layers'));
 
   const fileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
   const uploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload Excel');
   uploadBtn.addEventListener('click', () => fileInput.click());
   const uploadedLabel = el('span', { class: 'help' }, 'No file uploaded');
   const sampleLink = el('a', { class: 'link-btn', href: '#', role: 'button' }, 'Download Sample File');
-  sampleLink.addEventListener('click', (e) => { e.preventDefault(); downloadSampleAmortization(); });
+  sampleLink.addEventListener('click', (e) => { e.preventDefault(); downloadCustomizedRevisionSample(); });
 
-  let uploadedRows = null;
+  let uploadedRows = null;   // amortization schedule rows (Schedule sheet)
+  let uploadedCof = null;    // COF records (COF Layers sheet of the same file)
   fileInput.addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;
     try {
-      uploadedRows = await readUploadedSchedule(f);
-      uploadedLabel.textContent = `${f.name} — ${uploadedRows.length} rows`;
-      toast('Excel parsed successfully.', 'success');
-    } catch (err) { toast(err.message, 'error'); }
+      const parsed = await readCustomizedRevisionFile(f);
+      uploadedRows = parsed.scheduleRows;
+      uploadedCof = parsed.cofRows;
+      uploadedLabel.textContent = `${f.name} — ${uploadedRows.length} schedule rows, ${uploadedCof.length} COF record(s)`;
+      toast('File parsed: amortization schedule and COF layers loaded.', 'success');
+    } catch (err) { uploadedRows = null; uploadedCof = null; toast(err.message, 'error'); }
   });
 
   const uploadField = el('div', { class: 'field' });
   uploadField.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' },
     uploadBtn, fileInput, uploadedLabel));
   uploadField.appendChild(el('div', { style: 'margin-top:6px' }, sampleLink));
-  section.appendChild(el('div', { class: 'form-row full' }, uploadField));
+  section.appendChild(el('div', { class: 'sub-card' }, uploadField));
 
+  // From-only security layers (no To Date) — each applies from its From until the next layer's From.
   const securityLayers = layeredField({
     label: 'Loan Security Layers',
     name: 'securityLayers',
     schema: [
       { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'toDate', label: 'To Date', type: 'date' },
       { key: 'amount', label: 'Amount', type: 'number' },
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     minRows: 1, initialRows: 1, addLabel: '+ Add Security Layer',
   });
-  // COF Data Upload — same widget as Rate Revision — Structured (replaces the old NIM-comparison toggle).
-  const cofUpload = cofUploadField();
 
-  section.appendChild(el('div', { class: 'form-row full' }, securityLayers));
-  section.appendChild(el('div', { class: 'form-row full' }, cofUpload.field));
+  section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
@@ -699,15 +702,15 @@ export function renderRateRevisionCustomized(root) {
   root.appendChild(resultsPanel);
 
   calcBtn.addEventListener('click', () => {
-    if (!uploadedRows) return toast('Upload an amortization schedule first.', 'error');
-    // COF effective-date list from the uploaded schedule's span (first row = disbursement,
-    // last row = maturity), mirroring Rate Revision — Structured.
+    if (!uploadedRows) return toast('Upload the amortization schedule + COF layers file first.', 'error');
+    // COF effective-date list from the uploaded file's COF Layers sheet, clipped to the schedule's
+    // span (first row = disbursement, last row = maturity), mirroring Rate Revision — Structured.
     const firstDate = uploadedRows[0] && uploadedRows[0].date;
     const lastDate = uploadedRows[uploadedRows.length - 1] && uploadedRows[uploadedRows.length - 1].date;
-    const { cofData, warning } = buildCofData(cofUpload.getRows(), firstDate, lastDate);
+    const { cofData, warning } = buildCofData(uploadedCof, firstDate, lastDate);
     if (warning) toast(warning, 'warn');
     const inputs = {
-      securityLayers: securityLayers.getValue().filter(r => r.fromDate && r.toDate),
+      securityLayers: securityLayers.getValue().filter(r => r.fromDate),
       cofRecords: (cofData || []).length,
     };
     const metrics = computeRevisionCustomizedMetrics(uploadedRows, {
