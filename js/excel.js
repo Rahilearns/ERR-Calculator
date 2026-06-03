@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603a';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603b';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -463,6 +463,10 @@ function downloadRevisionStructuredVerify(filename, ctx) {
 
   const RATE = (modality) => (modality === 'EQI' || modality === 'Equal Principal + Interest (Quarterly)') ? 4 : 12;
   const ppyDiv = RATE(params.paymentModality);
+  // Annuity (EMI/EQI) => installment via PMT; otherwise Equal Principal => constant principal.
+  const isAnnuity = params.paymentModality === 'EMI' || params.paymentModality === 'EQI';
+  const moraRow = mora + 2;       // Excel row holding sl = mora (balance at end of moratorium)
+  const afterMoraRow = mora + 3;  // Excel row holding sl = mora+1 (first post-moratorium month)
 
   // Precompute rate-block starts for regular (post-moratorium) payment rows so EMI/EQI can recompute
   // the installment via PMT(blockRate, remainingPeriods, -balanceAtBlockStart) when the rate changes.
@@ -482,10 +486,11 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     }
   }
 
+  let eqpPrevPayRow = null; // Excel row of the previous Equal-Principal payment (quarterly chains =E(prev))
   rows.forEach((r, i) => {
     const xr = i + 2, pr = xr - 1;
     const d = new Date(r.date);
-    setCell(ws, `A${xr}`, r.sl, { s: STYLE.cellCenter });
+    setCell(ws, `A${xr}`, r.sl, { z: FMT.ACCOUNTING_INT, s: STYLE.cellCenter });
     setCell(ws, `B${xr}`, 0, { f: `DATE(${d.getFullYear()},${d.getMonth() + 1},${d.getDate()})`, z: 'dd-mmm-yyyy', s: STYLE.cellCenter });
 
     if (i === 0) {
@@ -518,7 +523,8 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       if (isPaymentRow) setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
       else setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
-    } else if (isPaymentRow) {
+    } else if (isPaymentRow && isAnnuity) {
+      // EMI/EQI annuity: installment via PMT (reset per rate block), principal = installment − interest.
       const bStart = blockStartBySl[r.sl];
       const bRow = bStart + 1; // Excel row of sl=(bStart-1) holding balance going into the block
       const periodsExpr = ppyDiv === 12
@@ -527,6 +533,19 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       const pmt = `PMT(${pct(r.rate)}/${ppyDiv},${periodsExpr},-Schedule!$F$${bRow},,0)`;
       setCell(ws, `C${xr}`, 0, { f: `${pmt}+I${pr}`, z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { f: `C${xr}-D${xr}`, z: FMT.ACCOUNTING });
+    } else if (isPaymentRow) {
+      // Equal Principal: CONSTANT principal sized over the post-moratorium payment count (tenor − mora).
+      // Monthly repeats the absolute formula every row; quarterly seeds the first payment then chains
+      // =E(prevQuarter). Installment = Interest + Principal + Accrued_prev. Matches rectified EMPP/EQPP.
+      if (ppyDiv === 12) {
+        setCell(ws, `E${xr}`, 0, { f: `$F$${moraRow}/('Inputs & Results'!$B$10-Schedule!$A$${moraRow})`, z: FMT.ACCOUNTING });
+      } else if (eqpPrevPayRow === null) {
+        setCell(ws, `E${xr}`, 0, { f: `$F$${afterMoraRow}/('Inputs & Results'!$B$10-Schedule!$A$${moraRow})*3`, z: FMT.ACCOUNTING });
+      } else {
+        setCell(ws, `E${xr}`, 0, { f: `E${eqpPrevPayRow}`, z: FMT.ACCOUNTING });
+      }
+      eqpPrevPayRow = xr;
+      setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
     } else {
       setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
