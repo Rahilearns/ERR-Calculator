@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603b';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603c';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -655,15 +655,27 @@ export function layeredField(opts) {
 }
 
 // Toast + modal
-export function toast(message, type = 'info', duration = 2400) {
+export function toast(message, type = 'info', duration) {
   const root = document.getElementById('toast-root');
-  const t = el('div', { class: `toast ${type}` }, message);
-  root.appendChild(t);
-  setTimeout(() => {
+  const t = el('div', { class: `toast ${type}` });
+  const msg = el('span', { class: 'toast-msg' }, message);
+  const close = el('button', { class: 'toast-close', type: 'button', 'aria-label': 'Dismiss' }, '×');
+  let timer = null;
+  const dismiss = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
     t.style.transition = 'opacity 0.2s ease';
     t.style.opacity = '0';
     setTimeout(() => t.remove(), 220);
-  }, duration);
+  };
+  close.addEventListener('click', dismiss);
+  t.appendChild(msg);
+  t.appendChild(close);
+  root.appendChild(t);
+  // Warnings & errors persist until the user dismisses them via the × button; info/success
+  // auto-dismiss after a comfortable delay but can still be closed early.
+  const persist = type === 'warn' || type === 'warning' || type === 'error';
+  if (!persist) timer = setTimeout(dismiss, duration != null ? duration : 5000);
+  return t;
 }
 
 export function openModal(node) {

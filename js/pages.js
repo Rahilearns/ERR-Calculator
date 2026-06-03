@@ -2,20 +2,20 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603b';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603b';
+} from './components.js?v=20260603c';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603c';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603b';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603b';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603b';
+} from './calculations.js?v=20260603c';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603c';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603c';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
-} from './excel.js?v=20260603b';
+} from './excel.js?v=20260603c';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -501,8 +501,8 @@ export function renderRateRevisionStructured(root) {
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     addLabel: '+ Add Security Layer',
-    minRows: 2,
-    initialRows: 2,
+    minRows: 1,
+    initialRows: 1,
     cascadingFromKey: 'fromDate',
     cascadingToKey: 'toDate',
     getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
@@ -518,29 +518,9 @@ export function renderRateRevisionStructured(root) {
   }
   tenorMonths.input.addEventListener('input', rerunLayerRules);
 
-  // COF Data Upload — replaces the old NIM-comparison toggle + COF layers.
-  let cofUploadedRows = null;
-  const cofGetSample = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Get Sample COF Excel');
-  cofGetSample.addEventListener('click', downloadCofSample);
-  const cofFileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
-  const cofUploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload COF Data');
-  cofUploadBtn.addEventListener('click', () => cofFileInput.click());
-  const cofStatus = el('span', { class: 'help' }, 'No COF file uploaded — interest expense will be 0.');
-  cofFileInput.addEventListener('change', async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    try {
-      cofUploadedRows = await readUploadedCof(f);
-      cofStatus.textContent = `${f.name} — ${cofUploadedRows.length} COF record(s) loaded.`;
-      toast('COF data parsed successfully.', 'success');
-    } catch (err) { cofUploadedRows = null; toast(err.message, 'error'); cofStatus.textContent = 'Upload failed: ' + err.message; }
-  });
-  const cofField = el('div', { class: 'field' });
-  const cofLbl = el('label', {}, 'COF Data Upload');
-  cofLbl.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
-  cofField.appendChild(cofLbl);
-  cofField.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' },
-    cofGetSample, cofUploadBtn, cofFileInput, cofStatus));
+  // COF Data Upload — upload button on the left, "Download Sample File" link below it.
+  const cofUpload = cofUploadField();
+  const cofField = cofUpload.field;
 
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
@@ -597,8 +577,8 @@ export function renderRateRevisionStructured(root) {
     if (lastTo > mat) return toast(`Last Lending Rate Layer "To Date" (${lastTo}) exceeds maturity (${mat}).`, 'error');
 
     // Build COF effective-date data from the uploaded file (0% before first record; cut at maturity).
-    const { cofData, warning } = buildCofData(cofUploadedRows, inputs.disbursementDate, mat);
-    if (warning) toast(warning, 'warn', 6000);
+    const { cofData, warning } = buildCofData(cofUpload.getRows(), inputs.disbursementDate, mat);
+    if (warning) toast(warning, 'warn');
 
     const mora = inputs.moratoriumAvail === 'Yes' ? inputs.moratoriumPeriod : 0;
     const params = {
@@ -647,13 +627,12 @@ export function renderRateRevisionCustomized(root) {
   const section = el('div', { class: 'section-card' });
   section.appendChild(el('h2', {}, 'Upload Amortization Schedule'));
 
-  const downloadSample = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Get Sample Excel');
-  downloadSample.addEventListener('click', downloadSampleAmortization);
-
   const fileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
   const uploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload Excel');
   uploadBtn.addEventListener('click', () => fileInput.click());
   const uploadedLabel = el('span', { class: 'help' }, 'No file uploaded');
+  const sampleLink = el('a', { class: 'link-btn', href: '#', role: 'button' }, 'Download Sample File');
+  sampleLink.addEventListener('click', (e) => { e.preventDefault(); downloadSampleAmortization(); });
 
   let uploadedRows = null;
   fileInput.addEventListener('change', async (e) => {
@@ -667,11 +646,9 @@ export function renderRateRevisionCustomized(root) {
   });
 
   const uploadField = el('div', { class: 'field' });
-  uploadField.appendChild(el('label', {}, 'Sample template / Upload your filled schedule'));
   uploadField.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' },
-    downloadSample, uploadBtn, fileInput, uploadedLabel));
-  uploadField.appendChild(el('span', { class: 'help' },
-    'Download the sample, fill in Date / Installment / Interest / Principal / URPA (first row = disbursement), then upload.'));
+    uploadBtn, fileInput, uploadedLabel));
+  uploadField.appendChild(el('div', { style: 'margin-top:6px' }, sampleLink));
   section.appendChild(el('div', { class: 'form-row full' }, uploadField));
 
   const securityLayers = layeredField({
@@ -683,27 +660,13 @@ export function renderRateRevisionCustomized(root) {
       { key: 'amount', label: 'Amount', type: 'number' },
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
-    initialRows: 0, addLabel: '+ Add Security Layer',
+    minRows: 1, initialRows: 1, addLabel: '+ Add Security Layer',
   });
-  const nimComparison = optionField({ label: 'Want to show NIM margin comparison?', name: 'nimComparison', options: ['No', 'Yes'], value: 'No', onChange: refresh });
-  const cofLayers = layeredField({
-    label: 'Cost of Fund Layers',
-    name: 'cofLayers',
-    schema: [
-      { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'toDate', label: 'To Date', type: 'date' },
-      { key: 'cofRate', label: 'COF (COF/ISC + OPEX)', type: 'percent' },
-    ],
-    initialRows: 0, addLabel: '+ Add COF Layer',
-  });
+  // COF Data Upload — same widget as Rate Revision — Structured (replaces the old NIM-comparison toggle).
+  const cofUpload = cofUploadField();
 
   section.appendChild(el('div', { class: 'form-row full' }, securityLayers));
-  section.appendChild(el('div', { class: 'form-row' }, nimComparison));
-  const cofRow = el('div', { class: 'form-row full' }, cofLayers);
-  section.appendChild(cofRow);
-
-  function refresh() { cofRow.classList.toggle('hidden', nimComparison.getValue() !== 'Yes'); }
-  refresh();
+  section.appendChild(el('div', { class: 'form-row full' }, cofUpload.field));
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
@@ -713,15 +676,19 @@ export function renderRateRevisionCustomized(root) {
 
   calcBtn.addEventListener('click', () => {
     if (!uploadedRows) return toast('Upload an amortization schedule first.', 'error');
+    // COF effective-date list from the uploaded schedule's span (first row = disbursement,
+    // last row = maturity), mirroring Rate Revision — Structured.
+    const firstDate = uploadedRows[0] && uploadedRows[0].date;
+    const lastDate = uploadedRows[uploadedRows.length - 1] && uploadedRows[uploadedRows.length - 1].date;
+    const { cofData, warning } = buildCofData(cofUpload.getRows(), firstDate, lastDate);
+    if (warning) toast(warning, 'warn');
     const inputs = {
       securityLayers: securityLayers.getValue().filter(r => r.fromDate && r.toDate),
-      nimComparison: nimComparison.getValue(),
-      cofLayers: cofLayers.getValue().filter(r => r.fromDate && r.toDate && r.cofRate !== null),
+      cofRecords: (cofData || []).length,
     };
     const metrics = computeRevisionCustomizedMetrics(uploadedRows, {
       securityLayers: inputs.securityLayers,
-      cofLayers: inputs.nimComparison === 'Yes' ? inputs.cofLayers : null,
-      hasNimComparison: inputs.nimComparison === 'Yes',
+      cofData,
     });
     const schedule = {
       rows: uploadedRows.map((r, i) => ({
@@ -749,6 +716,36 @@ export function renderRateRevisionCustomized(root) {
 // ============================================================
 function pageTitle(text) {
   return el('div', { class: 'page-title' }, el('h1', {}, text));
+}
+
+// Shared "COF Data Upload" widget (Rate Revision — Structured & Customized).
+// Upload button sits on the left; a blue "Download Sample File" link sits below it.
+// Returns { field, getRows } where getRows() yields the parsed COF rows (or null).
+function cofUploadField(onParsed) {
+  let rows = null;
+  const fileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
+  const uploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload COF Data');
+  uploadBtn.addEventListener('click', () => fileInput.click());
+  const status = el('span', { class: 'help' }, 'No COF file uploaded — interest expense will be 0.');
+  const sampleLink = el('a', { class: 'link-btn', href: '#', role: 'button' }, 'Download Sample File');
+  sampleLink.addEventListener('click', (e) => { e.preventDefault(); downloadCofSample(); });
+  fileInput.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      rows = await readUploadedCof(f);
+      status.textContent = `${f.name} — ${rows.length} COF record(s) loaded.`;
+      toast('COF data parsed successfully.', 'success');
+      if (onParsed) onParsed(rows);
+    } catch (err) { rows = null; status.textContent = 'Upload failed: ' + err.message; toast(err.message, 'error'); }
+  });
+  const field = el('div', { class: 'field' });
+  const lbl = el('label', {}, 'COF Data Upload');
+  lbl.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
+  field.appendChild(lbl);
+  field.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' }, uploadBtn, fileInput, status));
+  field.appendChild(el('div', { style: 'margin-top:6px' }, sampleLink));
+  return { field, getRows: () => rows };
 }
 
 function autoSaveSummary(ctx) {

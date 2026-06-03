@@ -849,11 +849,28 @@ table.schedule th {
   font-size: 14px;
   color: var(--text);
   min-width: 220px;
+  max-width: 360px;
   animation: toastIn 0.18s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 .toast.success { border-color: var(--accent); }
 .toast.error { border-color: var(--danger); }
 .toast.warn { border-color: var(--warn); }
+.toast-msg { flex: 1; }
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  margin: -2px -4px 0 0;
+  flex: 0 0 auto;
+}
+.toast-close:hover { color: var(--text); }
 
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(6px); }

@@ -1,11 +1,11 @@
 // App controller: tabs, theme, compare view
-import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603b';
+import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603c';
 import {
   renderRegularLoan, renderCustomizedLoan,
   renderRateRevisionStructured, renderRateRevisionCustomized,
-} from './pages.js?v=20260603b';
-import { listSummaries, deleteSummary } from './storage.js?v=20260603b';
-import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603b';
+} from './pages.js?v=20260603c';
+import { listSummaries, deleteSummary } from './storage.js?v=20260603c';
+import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603c';
 
 const root = document.getElementById('app-root');
 const compareBtn = document.getElementById('compare-btn');
@@ -89,6 +89,7 @@ const PRETTY_KEY = {
   rateLayers: 'Lending Rate Layers',
   securityLayers: 'Security Layers',
   cofLayers: 'COF Layers',
+  cofRecords: 'COF Records',
   uploadedRowsCount: 'Uploaded rows',
 };
 const PERCENT_KEYS = new Set(['offeredRate', 'totalCof', 'csRate']);

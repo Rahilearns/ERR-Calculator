@@ -585,7 +585,7 @@ export function computeRevisionMetrics(schedule) {
   };
 }
 
-export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers = [], cofLayers = null, hasNimComparison = false } = {}) {
+export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers = [], cofData = null } = {}) {
   const rows = uploadedRows;
   if (!rows || rows.length < 2) return null;
 
@@ -612,10 +612,13 @@ export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers 
   const tenorYears = totalDays / 365;
 
   let csBenefit = 0, totalInterestExpense = 0, effectiveRate = yolWeighted;
-  if (hasNimComparison && cofLayers && cofLayers.length) {
+  if (cofData && cofData.length) {
+    // COF effective on a date = the LAST uploaded entry whose date <= the given date
+    // (0 before the first entry / uncovered period). Mirrors Rate Revision — Structured.
     const getCofOn = (dateStr) => {
-      for (const r of cofLayers) if (r.fromDate && r.toDate && dateStr >= r.fromDate && dateStr <= r.toDate) return r.cofRate || 0;
-      return 0;
+      let result = 0;
+      for (const e of cofData) { if (e.date <= dateStr) result = e.rate; else break; }
+      return result;
     };
     const getSecOn = (dateStr) => {
       for (const r of (securityLayers || []))
@@ -634,8 +637,8 @@ export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers 
     }
     const nii = totalInterest + csBenefit - totalInterestExpense;
     const nim = avgPortfolio > 0 && tenorYears > 0 ? (nii / avgPortfolio) / tenorYears : 0;
-    const avgCof = cofLayers.reduce((s, r) => s + (r.cofRate || 0), 0) / cofLayers.length;
-    effectiveRate = avgCof + nim;
+    const effectiveCof = avgPortfolio > 0 && tenorYears > 0 ? (totalInterestExpense / avgPortfolio) / tenorYears : 0;
+    effectiveRate = nim + effectiveCof;
     return { effectiveRate, nim, nii, avgPortfolio, totalInterest, totalInterestExpense, csBenefit, tenorYears };
   }
   const nii = totalInterest - totalInterestExpense + csBenefit;

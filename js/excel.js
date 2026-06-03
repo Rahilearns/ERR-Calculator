@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603b';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603c';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -390,7 +390,7 @@ export function downloadVerificationExcel(filename, ctx) {
   setCell(wsInputs, `A${ySummaryHeaderRow}`, 'Yearly Summary', { text: true, s: STYLE.greenHeader });
   const yColHeaderRow = ySummaryHeaderRow + 1;
   const ySumHeaders = ['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit',
-                       'Net Interest Income', 'Average Portfolio', 'NIM'];
+                       'Net Interest Income', 'Average Portfolio', 'NIM', 'YoY ERR'];
   ySumHeaders.forEach((h, c) => setCell(wsInputs, XLSX.utils.encode_cell({ r: yColHeaderRow - 1, c }),
     h, { text: true, s: STYLE.greenHeader }));
 
@@ -422,17 +422,19 @@ export function downloadVerificationExcel(filename, ctx) {
     setCell(wsInputs, `F${yRow}`, 0, { f: `AVERAGE(Schedule!E${avgPortFromExcel}:E${avgPortToExcel})`, z: FMT.ACCOUNTING });
     // NIM = NetII / AvgPort
     setCell(wsInputs, `G${yRow}`, 0, { f: `IF(F${yRow}=0,0,E${yRow}/F${yRow})`, z: FMT.PCT4 });
+    // YoY ERR = (yearly Interest Expense / yearly Avg Portfolio) + yearly NIM
+    setCell(wsInputs, `H${yRow}`, 0, { f: `(C${yRow}/F${yRow})+G${yRow}`, z: FMT.PCT4 });
   }
   lastRow = yColHeaderRow + years;
 
-  wsInputs['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 6 } });
-  wsInputs['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }];
-  // Merges: title + page header + Results header + Yearly Summary header (across A:G)
+  wsInputs['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 7 } });
+  wsInputs['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 12 }];
+  // Merges: title + page header + Results header + Yearly Summary header (across A:H)
   wsInputs['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
     { s: { r: resHeaderRow - 1, c: 0 }, e: { r: resHeaderRow - 1, c: 1 } },
-    { s: { r: ySummaryHeaderRow - 1, c: 0 }, e: { r: ySummaryHeaderRow - 1, c: 6 } },
+    { s: { r: ySummaryHeaderRow - 1, c: 0 }, e: { r: ySummaryHeaderRow - 1, c: 7 } },
   ];
 
   XLSX.utils.book_append_sheet(wb, wsInputs, 'Inputs & Results');
@@ -625,7 +627,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const ySumRow = lastRow + 2;
   setCell(wsI, `A${ySumRow}`, 'Yearly Summary', { text: true, s: STYLE.greenHeader });
   const yHeadRow = ySumRow + 1;
-  ['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit', 'Net Interest Income', 'Average Portfolio', 'NIM']
+  ['Year', 'Interest Income', 'Interest Expense', 'Loan Security Benefit', 'Net Interest Income', 'Average Portfolio', 'NIM', 'YoY ERR']
     .forEach((h, c) => setCell(wsI, XLSX.utils.encode_cell({ r: yHeadRow - 1, c }), h, { text: true, s: STYLE.greenHeader }));
   for (let y = 1; y <= years; y++) {
     const yr = yHeadRow + y;
@@ -641,16 +643,18 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     setCell(wsI, `E${yr}`, 0, { f: `B${yr}+D${yr}-C${yr}`, z: FMT.ACCOUNTING });
     setCell(wsI, `F${yr}`, 0, { f: `AVERAGE(Schedule!F${fFrom}:F${fTo})`, z: FMT.ACCOUNTING });
     setCell(wsI, `G${yr}`, 0, { f: `IF(F${yr}=0,0,E${yr}/F${yr})`, z: FMT.PCT4 });
+    // YoY ERR = (yearly Interest Expense / yearly Avg Portfolio) + yearly NIM
+    setCell(wsI, `H${yr}`, 0, { f: `(C${yr}/F${yr})+G${yr}`, z: FMT.PCT4 });
   }
   lastRow = yHeadRow + years;
 
-  wsI['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 6 } });
-  wsI['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }];
+  wsI['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow - 1, c: 7 } });
+  wsI['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 12 }];
   wsI['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
     { s: { r: resHeader - 1, c: 0 }, e: { r: resHeader - 1, c: 1 } },
-    { s: { r: ySumRow - 1, c: 0 }, e: { r: ySumRow - 1, c: 6 } },
+    { s: { r: ySumRow - 1, c: 0 }, e: { r: ySumRow - 1, c: 7 } },
   ];
 
   XLSX.utils.book_append_sheet(wb, wsI, 'Inputs & Results');
@@ -714,8 +718,7 @@ function collectInputLinesFor(pageType, inp) {
   return [
     ['Uploaded Schedule', (inp.uploadedRowsCount || 0) + ' rows'],
     ['Loan Security Layers', (inp.securityLayers || []).length + ' layer(s)'],
-    ['Show NIM Comparison?', yesNo(inp.nimComparison)],
-    ['Cost of Fund Layers', (inp.cofLayers || []).length + ' layer(s)'],
+    ['Cost of Fund Records', (inp.cofRecords || 0) + ' record(s)'],
   ];
 }
 
