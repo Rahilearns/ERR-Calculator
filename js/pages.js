@@ -2,20 +2,20 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603f';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603f';
+} from './components.js?v=20260603g';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603g';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603f';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603f';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603f';
+} from './calculations.js?v=20260603g';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603g';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603g';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
-} from './excel.js?v=20260603f';
+} from './excel.js?v=20260603g';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -742,6 +742,24 @@ function pageTitle(text) {
   return el('div', { class: 'page-title' }, el('h1', {}, text));
 }
 
+// Header shown before a downloaded schedule (Excel/Word/PDF): only a few key facts.
+// Loan Amount (money, 2dp), Interest Rate (%, 2dp), Tenor, Moratorium Period (if moratorium),
+// and Payment Modality (labelled "… After Moratorium" when a moratorium exists).
+function buildScheduleMeta(ctx) {
+  const i = ctx.inputs || {};
+  const moraYes = i.moratoriumAvail === 'Yes' || (Number(i.moratoriumPeriod) || 0) > 0;
+  const header = {};
+  const loanAmt = i.loanAmount != null ? i.loanAmount : i.initialAmount;
+  if (loanAmt != null) header['Loan Amount'] = formatMoney(loanAmt);
+  if (i.offeredRate != null) header['Interest Rate'] = formatPercent(i.offeredRate);
+  const tenor = i.loanTenor != null ? i.loanTenor : i.tenorMonths;
+  if (tenor != null) header['Tenor (Months)'] = String(tenor);
+  if (moraYes && i.moratoriumPeriod) header['Moratorium Period (Months)'] = String(i.moratoriumPeriod);
+  const modality = i.paymentMode || i.paymentModality;
+  if (modality) header[moraYes ? 'Payment Modality After Moratorium' : 'Payment Modality'] = modality;
+  return { header };
+}
+
 // Shared "COF Data Upload" widget (Rate Revision — Structured & Customized).
 // Upload button sits on the left; a blue "Download Sample File" link sits below it.
 // Returns { field, getRows } where getRows() yields the parsed COF rows (or null).
@@ -869,17 +887,7 @@ function renderResults(panel, ctx) {
   );
   tableCard.appendChild(summaryRow);
 
-  const meta = {
-    title: ctx.pageTitle, subtitle: 'Generated ' + new Date().toLocaleString(),
-    summary: {
-      'Effective Rate (ERR)': formatPercent(m.effectiveRate),
-      'NIM': formatPercent(m.nim),
-      'Net Interest Income': formatMoney(m.nii),
-      'Total Principal Paid': formatMoney(totPrin),
-      'Total Interest Paid': formatMoney(totInt),
-      'Total Payment': formatMoney(totPay),
-    },
-  };
+  const meta = buildScheduleMeta(ctx);
   const dlLabel = el('span', { class: 'dl-label' },
     'Download the Schedule',
     el('span', { class: 'dl-arrow' }, '⟶'));

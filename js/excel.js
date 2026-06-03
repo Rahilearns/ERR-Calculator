@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603f';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603g';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -10,68 +10,87 @@ function num(v) {
 export function downloadScheduleAsExcel(filename, schedule, meta = {}) {
   const aoa = buildScheduleAoA(schedule, meta);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = aoa[aoa.length - 1].map(() => ({ wch: 16 }));
+  // Center every cell horizontally + vertically.
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell) cell.s = { ...(cell.s || {}), alignment: { horizontal: 'center', vertical: 'center' } };
+    }
+  }
+  ws['!cols'] = (aoa[aoa.length - 1] || []).map(() => ({ wch: 16 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Amortization');
-  XLSX.writeFile(wb, filename);
+  XLSX.writeFile(wb, filename, { cellStyles: true });
 }
 
+// AoA: a small header (meta.header key/value pairs) then the schedule + a Total row.
 function buildScheduleAoA(schedule, meta) {
   const aoa = [];
-  if (meta.title) aoa.push([meta.title]);
-  if (meta.subtitle) aoa.push([meta.subtitle]);
-  if (meta.title || meta.subtitle) aoa.push([]);
-  if (meta.summary) {
-    Object.entries(meta.summary).forEach(([k, v]) => aoa.push([k, v]));
+  if (meta.header) {
+    Object.entries(meta.header).forEach(([k, v]) => aoa.push([k, v]));
     aoa.push([]);
   }
-
-  const hasDate = schedule.rows && schedule.rows.length && schedule.rows[0].date !== undefined;
-  const hasIDP = schedule.rows && schedule.rows.some(r => (r.idpReceivable || 0) > 0);
+  const rows = schedule.rows || [];
+  const hasDate = rows.length && rows[0].date !== undefined;
+  const hasIDP = rows.some(r => (r.idpReceivable || 0) > 0);
   const headers = ['Sl.', ...(hasDate ? ['Date'] : []), 'Installment', 'Interest', 'Principal', 'URPA'];
   if (hasIDP) headers.push('Accrued Interest');
   aoa.push(headers);
 
-  for (const r of schedule.rows) {
+  let tInst = 0, tInt = 0, tPrin = 0, tAcc = 0;
+  for (const r of rows) {
     const row = [r.sl];
     if (hasDate) row.push(r.date || '');
     row.push(num(r.installment), num(r.interest), num(r.principal), num(r.urpa));
     if (hasIDP) row.push(num(r.idpReceivable || 0));
     aoa.push(row);
+    tInst += Number(r.installment) || 0; tInt += Number(r.interest) || 0;
+    tPrin += Number(r.principal) || 0; tAcc += Number(r.idpReceivable) || 0;
   }
+  const total = ['Total', ...(hasDate ? [''] : []), num(tInst), num(tInt), num(tPrin), ''];
+  if (hasIDP) total.push(num(tAcc));
+  aoa.push(total);
   return aoa;
 }
 
 // Word
 export async function downloadScheduleAsWord(filename, schedule, meta = {}) {
   if (typeof docx === 'undefined') { alert('Word export library not loaded.'); return; }
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, HeadingLevel, WidthType, TextRun } = docx;
-  const hasDate = schedule.rows[0]?.date !== undefined;
-  const hasIDP = schedule.rows.some(r => (r.idpReceivable || 0) > 0);
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun, AlignmentType, VerticalAlign } = docx;
+  const rows = schedule.rows || [];
+  const hasDate = rows[0]?.date !== undefined;
+  const hasIDP = rows.some(r => (r.idpReceivable || 0) > 0);
   const headers = ['Sl.', ...(hasDate ? ['Date'] : []), 'Installment', 'Interest', 'Principal', 'URPA'];
   if (hasIDP) headers.push('Accrued Interest');
 
-  const headerRow = new TableRow({
-    children: headers.map(h => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })] })),
+  // Cell centered both horizontally and vertically.
+  const cell = (text, bold = false) => new TableCell({
+    verticalAlign: VerticalAlign.CENTER,
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(text), bold })] })],
   });
-  const dataRows = schedule.rows.map(r => {
-    const cells = [String(r.sl)];
+  const headerRow = new TableRow({ tableHeader: true, children: headers.map(h => cell(h, true)) });
+  let tInst = 0, tInt = 0, tPrin = 0, tAcc = 0;
+  const dataRows = rows.map(r => {
+    const cells = [r.sl];
     if (hasDate) cells.push(r.date || '');
     cells.push(fmtM(r.installment), fmtM(r.interest), fmtM(r.principal), fmtM(r.urpa));
     if (hasIDP) cells.push(fmtM(r.idpReceivable || 0));
-    return new TableRow({ children: cells.map(c => new TableCell({ children: [new Paragraph(c)] })) });
+    tInst += Number(r.installment) || 0; tInt += Number(r.interest) || 0;
+    tPrin += Number(r.principal) || 0; tAcc += Number(r.idpReceivable) || 0;
+    return new TableRow({ children: cells.map(c => cell(c)) });
   });
+  const totalCells = ['Total', ...(hasDate ? [''] : []), fmtM(tInst), fmtM(tInt), fmtM(tPrin), ''];
+  if (hasIDP) totalCells.push(fmtM(tAcc));
+  const totalRow = new TableRow({ children: totalCells.map(c => cell(c, true)) });
 
   const children = [];
-  if (meta.title) children.push(new Paragraph({ text: meta.title, heading: HeadingLevel.HEADING_1 }));
-  if (meta.subtitle) children.push(new Paragraph(meta.subtitle));
-  if (meta.summary) {
-    Object.entries(meta.summary).forEach(([k, v]) =>
+  if (meta.header) {
+    Object.entries(meta.header).forEach(([k, v]) =>
       children.push(new Paragraph({ children: [new TextRun({ text: `${k}: `, bold: true }), new TextRun(String(v))] })));
+    children.push(new Paragraph(''));
   }
-  children.push(new Paragraph(''));
-  children.push(new Paragraph({ text: 'Amortization Schedule', heading: HeadingLevel.HEADING_2 }));
-  children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...dataRows] }));
+  children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...dataRows, totalRow] }));
 
   const doc = new Document({ sections: [{ properties: {}, children }] });
   const blob = await Packer.toBlob(doc);
@@ -84,26 +103,33 @@ export function downloadScheduleAsPDF(filename, schedule, meta = {}) {
   if (!jsPDF) { alert('PDF export library not loaded.'); return; }
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   let y = 40;
-  if (meta.title) { doc.setFontSize(14); doc.text(meta.title, 40, y); y += 20; }
-  if (meta.subtitle) { doc.setFontSize(10); doc.text(meta.subtitle, 40, y); y += 16; }
-  if (meta.summary) {
+  if (meta.header) {
     doc.setFontSize(10);
-    Object.entries(meta.summary).forEach(([k, v]) => { doc.text(`${k}: ${v}`, 40, y); y += 12; });
+    Object.entries(meta.header).forEach(([k, v]) => { doc.text(`${k}: ${v}`, 40, y); y += 14; });
     y += 6;
   }
-  const hasDate = schedule.rows[0]?.date !== undefined;
+  const rows = schedule.rows || [];
+  const hasDate = rows[0]?.date !== undefined;
+  const hasIDP = rows.some(r => (r.idpReceivable || 0) > 0);
   const headers = ['Sl.', ...(hasDate ? ['Date'] : []), 'Installment', 'Interest', 'Principal', 'URPA'];
-  const body = schedule.rows.map(r => {
+  if (hasIDP) headers.push('Accrued Interest');
+  let tInst = 0, tInt = 0, tPrin = 0, tAcc = 0;
+  const body = rows.map(r => {
     const row = [String(r.sl)];
     if (hasDate) row.push(r.date || '');
     row.push(fmtM(r.installment), fmtM(r.interest), fmtM(r.principal), fmtM(r.urpa));
+    if (hasIDP) row.push(fmtM(r.idpReceivable || 0));
+    tInst += Number(r.installment) || 0; tInt += Number(r.interest) || 0;
+    tPrin += Number(r.principal) || 0; tAcc += Number(r.idpReceivable) || 0;
     return row;
   });
+  const foot = ['Total', ...(hasDate ? [''] : []), fmtM(tInst), fmtM(tInt), fmtM(tPrin), ''];
+  if (hasIDP) foot.push(fmtM(tAcc));
   doc.autoTable({
-    head: [headers], body, startY: y,
-    styles: { fontSize: 8, cellPadding: 3 },
-    headStyles: { fillColor: [37, 70, 224], textColor: 255 },
-    columnStyles: { 0: { halign: 'right' }, 1: { halign: 'center' } },
+    head: [headers], body, foot: [foot], startY: y,
+    styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle' },
+    headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center', valign: 'middle' },
+    footStyles: { fillColor: [230, 235, 255], textColor: 20, fontStyle: 'bold', halign: 'center' },
     margin: { left: 40, right: 40 },
   });
   doc.save(filename);
