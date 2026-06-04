@@ -325,15 +325,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* Smart-shaped bordered sub-section — groups a layered field / upload block
    in a distinct rounded, bordered container with breathing room around it. */
-/* Distinct sections are set apart by generous vertical spacing (no border, no stripe,
-   no shadow) over a subtle shaded area, so the surrounding fields keep their full width
-   and the section reads as its own region purely from the breathing room around it. */
+/* Distinct sections are set apart purely by generous vertical spacing — no border,
+   stripe, shadow, or background — so the content and boxes stretch to the full content
+   width like every other field, with the breathing room alone marking the section. */
 .sub-card {
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 12px 12px 14px;
+  padding: 0;
   margin: 34px 0;
-  background: var(--bg-soft);
+  background: transparent;
   box-shadow: none;
 }
 .sub-card > :first-child { margin-top: 0; }
@@ -750,10 +749,9 @@ tr.totals-row td {
 /* Download schedule — outlined box holding the three download buttons as one segment */
 .download-box {
   margin-top: 30px;
-  padding: 12px 12px 14px;
+  padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-soft);
+  background: transparent;
 }
 .download-box .dl-title {
   font-size: 14px;
@@ -983,7 +981,7 @@ table.schedule th {
   main { padding: 14px 12px 36px; }
   .app-header { padding: 12px 14px; }
   .section-card { padding: 13px; }
-  .sub-card { padding: 11px 11px 13px; margin: 26px 0; }
+  .sub-card { padding: 0; margin: 26px 0; }
 }
 
 @media (max-width: 600px) {
