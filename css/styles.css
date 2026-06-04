@@ -123,36 +123,46 @@ body {
 /* ============ Tabs ============ */
 .tab-nav {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
   max-width: 780px;
-  margin: 12px auto 0;
+  margin: 14px auto 0;
   padding: 0 16px;
   width: 100%;
-  flex-wrap: wrap;
 }
+/* Segment selector cards: icon stacked over label so the tabs read as a distinct
+   module switcher (not in-page action buttons). Active card is lifted with an
+   accent ring + soft shadow. */
 .tab-btn {
-  flex: 1 1 auto;
+  flex: 1 1 calc(25% - 6px);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--bg-elev);
   color: var(--text-soft);
   border: 1px solid var(--border);
-  padding: 10px 14px;
+  padding: 12px 10px;
   border-radius: var(--radius-sm);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
   cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
+.tab-btn .tab-ic { font-size: 18px; line-height: 1; }
 .tab-btn:hover { color: var(--text); border-color: var(--border-strong); }
 .tab-btn.active {
-  background: var(--primary);
-  color: var(--primary-text);
+  color: var(--primary);
+  background: var(--bg);
   border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 6px 16px rgba(0, 0, 0, 0.10);
 }
+.tab-btn.active .tab-ic { color: var(--primary); }
 
 /* ============ Main / pages ============ */
 main {
@@ -951,17 +961,9 @@ table.schedule th {
   /* Mobile shows Loan Facilities only; Rate Revision stays desktop-only */
   .tab-btn[data-tab="revisionStructured"],
   .tab-btn[data-tab="revisionCustomized"] { display: none; }
-  /* The two Loan Facilities tabs sit side by side; long labels wrap to two lines */
-  .tab-btn {
-    flex: 1 1 calc(50% - 3px);
-    font-size: 11.5px;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    text-align: center;
-    line-height: 1.25;
-    padding: 8px;
-  }
+  /* The two Loan Facilities cards sit side by side; labels wrap to two lines */
+  .tab-btn { flex: 1 1 calc(50% - 4px); font-size: 11px; padding: 10px 8px; gap: 4px; }
+  .tab-btn .tab-ic { font-size: 16px; }
 
   /* Smaller (still readable) font + tighter spacing so the 2-column rows and
      one-line layer tables fit a phone screen. */
