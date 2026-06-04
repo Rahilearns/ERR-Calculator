@@ -584,6 +584,9 @@ select.field-error,
   border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
+/* Cell wrapper is transparent on desktop (children sit directly in the grid);
+   on mobile it becomes a labelled block (see the responsive section). */
+.layer-cell { display: contents; }
 .layer-row input,
 .layer-row select {
   background: var(--bg-elev);
@@ -928,12 +931,49 @@ table.schedule th {
   background: var(--bg-elev);
 }
 
-/* Responsive */
+/* ============ Responsive / mobile ============ */
+/* Desktop layout is untouched; these rules only kick in on smaller screens. */
 @media (max-width: 720px) {
   .landing-grid { grid-template-columns: 1fr; }
   .form-row, .form-row.three { grid-template-columns: 1fr; }
-  main { padding: 20px 14px 40px; }
+  main { padding: 16px 12px 40px; }
   .app-header { padding: 12px 14px; }
+  /* Tabs wrap two-per-row so all four stay visible (no cramped single line) */
+  .tab-nav { padding: 0 12px; }
+  .tab-btn { flex: 1 1 calc(50% - 4px); }
+  .results-actions, .download-bar { flex-wrap: wrap; }
+}
+
+@media (max-width: 600px) {
+  .section-card { padding: 13px; }
+  .sub-card { padding: 12px 12px 14px; margin: 14px 0; }
+  .brand-text { font-size: 15px; }
+  .results-grid, .totals-summary { grid-template-columns: 1fr; }
+  .metric-card .value { font-size: 20px; }
+
+  /* Layered tables (From / Amount / Rate …) become labelled stacked cards —
+     one field per line, each tagged with its column name. */
+  .layer-header { display: none; }
+  .layer-row { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+  .layer-cell { display: block; }
+  .layer-cell::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-mute);
+    margin-bottom: 4px;
+  }
+  .layer-row .row-del { align-self: flex-end; margin-top: -2px; }
+
+  /* Full-width primary actions are easier to tap */
+  .action-bar, .results-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+  .action-bar button, .results-actions button { width: 100%; }
+
+  /* Toasts span the available width near the bottom */
+  .toast-root { left: 12px; right: 12px; bottom: 14px; }
+  .toast { max-width: none; min-width: 0; }
 }
 
 .hidden { display: none !important; }

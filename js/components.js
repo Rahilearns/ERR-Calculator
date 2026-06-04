@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603j';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603k';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -387,7 +387,7 @@ export function layeredField(opts) {
   }
 
   function buildCell(s, row, inputs, values) {
-    let inp;
+    let inp, cellNode = null;
     if (s.type === 'option') {
       inp = el('select', { class: 'centered-input' });
       const opts = typeof s.options === 'function' ? s.options() : s.options;
@@ -435,9 +435,7 @@ export function layeredField(opts) {
         fireChange();
       });
       refreshEmpty();
-      row.appendChild(pwrap);
-      inputs[s.key] = inp;
-      return;
+      cellNode = pwrap;
     } else {
       inp = el('input', { type: 'text', inputmode: 'decimal', placeholder: '0', class: 'numeric-input' });
       if (values[s.key] !== undefined && values[s.key] !== null) {
@@ -448,7 +446,9 @@ export function layeredField(opts) {
       inp.addEventListener('input', fireChange);
     }
     inputs[s.key] = inp;
-    row.appendChild(inp);
+    // Wrap each control with its column label so layers can stack on mobile.
+    // `.layer-cell { display: contents }` keeps the desktop grid identical.
+    row.appendChild(el('div', { class: 'layer-cell', 'data-label': s.label }, cellNode || inp));
   }
 
   function removeRow(rowApi) {
