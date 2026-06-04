@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603o';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603o';
+} from './components.js?v=20260603p';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603p';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603o';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603o';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603o';
+} from './calculations.js?v=20260603p';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603p';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603p';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603o';
+} from './excel.js?v=20260603p';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -838,7 +838,7 @@ function renderResults(panel, ctx) {
   // Top-right actions: Download Report (left), Verify Calculation (right)
   const baseFname = ctx.pageTitle.replace(/[^a-z0-9]+/gi, '_') + '_' + new Date().toISOString().slice(0, 10);
   const reportBtn = el('button', { class: 'secondary-btn', type: 'button' }, '📄 Download Report');
-  const verifyBtn = el('button', { class: 'verify-btn', type: 'button' }, '🧮 Verify Calculation');
+  const verifyBtn = el('button', { class: 'verify-btn', type: 'button' }, 'Verify Calculation');
   reportBtn.addEventListener('click', () => downloadReportPDF(baseFname + '_Report.pdf', ctx));
   verifyBtn.addEventListener('click', () => downloadVerificationExcel(baseFname + '_Verification.xlsx', ctx));
   card.appendChild(el('div', { class: 'results-actions' }, reportBtn, verifyBtn));
