@@ -2,26 +2,39 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603r';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603r';
+} from './components.js?v=20260603s';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603s';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603r';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603r';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603r';
+} from './calculations.js?v=20260603s';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603s';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603s';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603r';
+} from './excel.js?v=20260603s';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
 // Cached page state by tab key (also persisted via storage saveDraft)
 const tabState = {};
+
+// Render a field's label across two lines: a primary phrase plus a secondary part.
+// The secondary part stays inline on desktop (reads as one line, unchanged look) and
+// drops onto its own line on mobile (CSS .lbl-line2). Forcing both paired fields to a
+// matching two-line height keeps their input boxes aligned on the same row.
+function setTwoLineLabel(field, line1, line2) {
+  const lbl = field.querySelector('label');
+  if (!lbl) return;
+  const icon = lbl.querySelector('.info-icon');
+  lbl.textContent = line1 + ' ';
+  lbl.appendChild(el('span', { class: 'lbl-line2' }, line2));
+  if (icon) lbl.appendChild(icon);
+}
 
 // ============================================================
 // REGULAR (STRUCTURED) LOAN FACILITY
@@ -59,6 +72,7 @@ export function renderRegularLoan(root) {
   });
 
   const totalCof = percentField({ label: 'Total Cost of Fund [COF/ISC + OPEX]', name: 'totalCof' });
+  setTwoLineLabel(totalCof, 'Total Cost of Fund', '(COF/ISC + OPEX)');
 
   function securityOptions() {
     const pm = paymentMode.getValue();
@@ -72,6 +86,7 @@ export function renderRegularLoan(root) {
     label: 'Funded Security Type', name: 'fundedSecurityType', options: securityOptions(), value: 'FDR',
     onChange: refresh,
   });
+  setTwoLineLabel(fundedSecurityType, 'Funded Security', 'Type');
 
   const csAmount = numberField({ label: 'Cash Security / FDR Amount', name: 'csAmount' });
   const csRate = percentField({ label: 'Cash Security / FDR Rate', name: 'csRate' });
@@ -283,10 +298,12 @@ export function renderCustomizedLoan(root) {
   function refreshLayerOpts() { paymentLayers.refreshOptions(); }
 
   const totalCof = percentField({ label: 'Total Cost of Fund [COF/ISC + OPEX]', name: 'totalCof' });
+  setTwoLineLabel(totalCof, 'Total Cost of Fund', '(COF/ISC + OPEX)');
   const fundedSecurityType = optionField({
     label: 'Funded Security Type', name: 'fundedSecurityType',
     options: ['FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: 'FDR', onChange: refresh,
   });
+  setTwoLineLabel(fundedSecurityType, 'Funded Security', 'Type');
   const csAmount = numberField({ label: 'Cash Security / FDR Amount', name: 'csAmount' });
   const csRate = percentField({ label: 'Cash Security / FDR Rate', name: 'csRate' });
   const numInst = numberField({ label: 'Number of Installments', name: 'numInst', integerOnly: true, min: 1 });
@@ -891,13 +908,13 @@ function renderResults(panel, ctx) {
   tableCard.appendChild(summaryRow);
 
   const meta = buildScheduleMeta(ctx);
-  const dlLabel = el('span', { class: 'dl-label' },
-    'Download the Schedule',
-    el('span', { class: 'dl-arrow' }, '⟶'));
   const dlExcel = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Excel');
   const dlWord = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ Word');
   const dlPdf = el('button', { class: 'secondary-btn', type: 'button' }, '⬇ PDF');
-  const dlBar = el('div', { class: 'download-bar' }, dlLabel, dlExcel, dlWord, dlPdf);
+  const dlBar = el('div', { class: 'download-box' },
+    el('div', { class: 'dl-title' }, 'Download the Schedule'),
+    el('div', { class: 'download-buttons' }, dlExcel, dlWord, dlPdf),
+  );
   tableCard.appendChild(dlBar);
   dlExcel.addEventListener('click', () => downloadScheduleAsExcel(baseFname + '.xlsx', ctx.schedule, meta));
   dlWord.addEventListener('click', () => downloadScheduleAsWord(baseFname + '.docx', ctx.schedule, meta));

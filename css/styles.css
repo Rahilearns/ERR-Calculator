@@ -374,6 +374,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   font-weight: 500;
   color: var(--text-soft);
 }
+/* Two-line label: the secondary part reads inline on desktop (unchanged look),
+   and drops to its own line on mobile (see media query) so paired fields align. */
+.lbl-line2 { white-space: nowrap; }
 .field .help {
   font-size: 12px;
   color: var(--text-mute);
@@ -705,29 +708,28 @@ tr.totals-row td {
   text-align: center;
 }
 
-/* Download bar under schedule */
-.download-bar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  justify-content: flex-end;
-  align-items: center;
+/* Download schedule — outlined box holding the three download buttons as one segment */
+.download-box {
+  margin-top: 16px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
 }
-.download-bar .dl-label {
-  margin-right: auto;
+.download-box .dl-title {
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-soft);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  margin-bottom: 12px;
 }
-.download-bar .dl-label .dl-arrow {
-  font-size: 28px;
-  line-height: 1;
-  color: var(--text);
-  font-weight: 300;
-  letter-spacing: -2px;
+.download-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.download-buttons .secondary-btn {
+  width: 100%;
+  text-align: center;
 }
 .results-actions {
   display: flex;
@@ -972,7 +974,9 @@ table.schedule th {
   /* Keep room on the right for the % suffix so the value never overlaps it */
   .field .percent-input-fixed input { padding: 7px 24px 7px 8px; }
   .form-row { gap: 8px; margin-bottom: 8px; }
-  .download-bar { flex-wrap: wrap; }
+  /* Force the secondary label part onto its own line so the COF and Funded Security
+     fields are both two lines tall and their input boxes sit on the same row. */
+  .lbl-line2 { display: block; }
 
   /* Results actions on one line: Verify Calculation (left) + Download Report (right) */
   .results-actions { flex-wrap: nowrap; flex-direction: row-reverse; gap: 8px; }
