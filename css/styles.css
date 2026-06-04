@@ -11,6 +11,7 @@
   --primary: #2546e0;
   --primary-soft: #e8edff;
   --primary-text: #ffffff;
+  --brand-blue: #2a4cd6;
   --accent: #00a37a;
   --warn: #d97706;
   --danger: #d53f4c;
@@ -32,6 +33,7 @@
   --primary: #4d62d9;
   --primary-soft: #1c2545;
   --primary-text: #ffffff;
+  --brand-blue: #8ea4ff;
   --accent: #34d6a8;
   --warn: #f6b545;
   --danger: #ff6b78;
@@ -71,25 +73,25 @@ body {
 }
 .brand {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 1px;
   cursor: pointer;
   user-select: none;
+  min-width: 0;
 }
-.brand-mark {
-  display: inline-block;
-  background: var(--primary);
-  color: var(--primary-text);
+.brand-title {
   font-weight: 700;
-  padding: 6px 10px;
-  border-radius: 8px;
-  letter-spacing: 0.5px;
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1.15;
+  color: var(--brand-blue);
+  white-space: nowrap;
 }
-.brand-text {
-  font-weight: 600;
-  font-size: 17px;
-  color: var(--text);
+.brand-sub {
+  font-weight: 500;
+  font-size: 12.5px;
+  line-height: 1.15;
+  color: var(--brand-blue);
+  opacity: 0.82;
 }
 .header-actions { display: flex; gap: 10px; }
 
@@ -123,46 +125,36 @@ body {
 /* ============ Tabs ============ */
 .tab-nav {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
   max-width: 780px;
-  margin: 14px auto 0;
+  margin: 12px auto 0;
   padding: 0 16px;
   width: 100%;
+  flex-wrap: wrap;
 }
-/* Segment selector cards: icon stacked over label so the tabs read as a distinct
-   module switcher (not in-page action buttons). Active card is lifted with an
-   accent ring + soft shadow. */
 .tab-btn {
-  flex: 1 1 calc(25% - 6px);
+  flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   background: var(--bg-elev);
   color: var(--text-soft);
   border: 1px solid var(--border);
-  padding: 12px 10px;
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
   font: inherit;
   font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
-  text-align: center;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.tab-btn .tab-ic { font-size: 18px; line-height: 1; }
 .tab-btn:hover { color: var(--text); border-color: var(--border-strong); }
 .tab-btn.active {
-  color: var(--primary);
-  background: var(--bg);
+  background: var(--primary);
+  color: var(--primary-text);
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary), 0 6px 16px rgba(0, 0, 0, 0.10);
 }
-.tab-btn.active .tab-ic { color: var(--primary); }
 
 /* ============ Main / pages ============ */
 main {
@@ -638,10 +630,11 @@ select.field-error,
 /* Footer actions */
 .action-bar {
   display: flex;
-  justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
 }
+/* Calculate ERR spans the full width of its section. */
+.action-bar .primary-btn { flex: 1 1 auto; width: 100%; }
 
 /* Results */
 .results-grid {
@@ -935,12 +928,12 @@ table.schedule th {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Footer */
-.app-footer {
-  text-align: center;
-  padding: 14px;
-  color: var(--text-mute);
-  font-size: 12px;
+/* Bottom compare bar — its own section, shown only once a summary is saved */
+.compare-bar {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  margin-top: 8px;
   border-top: 1px solid var(--border);
   background: var(--bg-elev);
 }
@@ -961,9 +954,17 @@ table.schedule th {
   /* Mobile shows Loan Facilities only; Rate Revision stays desktop-only */
   .tab-btn[data-tab="revisionStructured"],
   .tab-btn[data-tab="revisionCustomized"] { display: none; }
-  /* The two Loan Facilities cards sit side by side; labels wrap to two lines */
-  .tab-btn { flex: 1 1 calc(50% - 4px); font-size: 11px; padding: 10px 8px; gap: 4px; }
-  .tab-btn .tab-ic { font-size: 16px; }
+  /* The two Loan Facilities tabs sit side by side; long labels wrap to two lines */
+  .tab-btn {
+    flex: 1 1 calc(50% - 3px);
+    font-size: 11.5px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: center;
+    line-height: 1.25;
+    padding: 8px;
+  }
 
   /* Smaller (still readable) font + tighter spacing so the 2-column rows and
      one-line layer tables fit a phone screen. */
@@ -980,8 +981,8 @@ table.schedule th {
      fields are both two lines tall and their input boxes sit on the same row. */
   .lbl-line2 { display: block; }
 
-  /* Results actions on one line: Verify Calculation (left) + Download Report (right) */
-  .results-actions { flex-wrap: nowrap; flex-direction: row-reverse; gap: 8px; }
+  /* Results actions on one line, matching desktop: Download Report (left) + Verify (right) */
+  .results-actions { flex-wrap: nowrap; gap: 8px; }
   .results-actions button { flex: 1 1 0; min-width: 0; font-size: 13px; padding: 9px 6px; }
 
   /* Totals: three equal boxes that fit the screen; smaller numbers so they don't overflow */
@@ -1036,7 +1037,8 @@ table.schedule th {
   .metric-card { padding: 12px; }
   .metric-card .value { font-size: 18px; }
   .metric-card .label { font-size: 11px; }
-  .brand-text { font-size: 15px; }
+  .brand-title { font-size: 14px; }
+  .brand-sub { font-size: 11px; }
   .toast-root { left: 12px; right: 12px; bottom: 14px; }
   .toast { max-width: none; min-width: 0; }
 }

@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603t';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603t';
+} from './components.js?v=20260603u';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603u';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603t';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603t';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603t';
+} from './calculations.js?v=20260603u';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603u';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603u';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603t';
+} from './excel.js?v=20260603u';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -41,10 +41,7 @@ function setTwoLineLabel(field, line1, line2) {
 // ============================================================
 export function renderRegularLoan(root) {
   root.innerHTML = '';
-  root.appendChild(pageTitle('Loan Facilities — Structured'));
-
   const section = el('div', { class: 'section-card' });
-  section.appendChild(el('h2', {}, 'Loan Inputs'));
 
   const loanAmount = numberField({ label: 'Loan Amount', name: 'loanAmount' });
   const offeredRate = percentField({ label: 'Offered Rate', name: 'offeredRate' });
@@ -221,10 +218,7 @@ function fail(msg) { toast(msg, 'error'); return false; }
 // ============================================================
 export function renderCustomizedLoan(root) {
   root.innerHTML = '';
-  root.appendChild(pageTitle('Loan Facilities — Customized'));
-
   const section = el('div', { class: 'section-card' });
-  section.appendChild(el('h2', {}, 'Loan Inputs'));
 
   const loanAmount = numberField({ label: 'Loan Amount', name: 'loanAmount' });
   const offeredRate = percentField({ label: 'Offered Rate', name: 'offeredRate' });
@@ -471,10 +465,7 @@ function validateCustomized(i) {
 // ============================================================
 export function renderRateRevisionStructured(root) {
   root.innerHTML = '';
-  root.appendChild(pageTitle('Rate Revision — Structured'));
-
   const section = el('div', { class: 'section-card' });
-  section.appendChild(el('h2', {}, 'Loan Inputs'));
 
   const initialAmount = numberField({ label: 'Initial Loan Amount', name: 'initialAmount' });
   const disbursementDate = dateField({
@@ -666,8 +657,6 @@ function collectRevisionStructuredInputs(f) {
 // ============================================================
 export function renderRateRevisionCustomized(root) {
   root.innerHTML = '';
-  root.appendChild(pageTitle('Rate Revision — Customized'));
-
   const section = el('div', { class: 'section-card' });
   section.appendChild(el('h2', {}, 'Upload Amortization Schedule and COF Layers'));
 

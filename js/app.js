@@ -1,11 +1,11 @@
 // App controller: tabs, theme, compare view
-import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603t';
+import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603u';
 import {
   renderRegularLoan, renderCustomizedLoan,
   renderRateRevisionStructured, renderRateRevisionCustomized,
-} from './pages.js?v=20260603t';
-import { listSummaries, deleteSummary } from './storage.js?v=20260603t';
-import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603t';
+} from './pages.js?v=20260603u';
+import { listSummaries, deleteSummary } from './storage.js?v=20260603u';
+import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603u';
 
 const root = document.getElementById('app-root');
 const compareBtn = document.getElementById('compare-btn');
@@ -42,7 +42,8 @@ document.getElementById('brand-home').addEventListener('click', () => navigate('
 function refreshCompareVisibility() {
   const count = listSummaries().length;
   document.getElementById('saved-count').textContent = count;
-  compareBtn.classList.toggle('hidden', count === 0);
+  // The Compare control lives in a bottom bar; show it only once a summary exists.
+  document.getElementById('compare-bar').classList.toggle('hidden', count === 0);
 }
 window.addEventListener('summary-saved', refreshCompareVisibility);
 window.addEventListener('summary-deleted', refreshCompareVisibility);
