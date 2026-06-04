@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zb';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zb';
+} from './components.js?v=20260603zc';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zc';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zb';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zb';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zb';
+} from './calculations.js?v=20260603zc';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zc';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zc';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zb';
+} from './excel.js?v=20260603zc';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -261,8 +261,8 @@ export function renderCustomizedLoan(root) {
       { key: 'paymentType', label: 'Payment Type', type: 'option', options: [
           'Customized Principal', 'EMI', 'EQI',
           'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)',
-        ], width: '1.4fr' },
-      { key: 'customPrincipal', label: 'Custom Principal', type: 'number', width: '1.2fr' },
+        ], width: '1fr' },
+      { key: 'customPrincipal', label: 'Custom Principal', type: 'number', width: '1fr' },
     ],
     addLabel: '+ Add Payment Layer',
     minRows: 2,

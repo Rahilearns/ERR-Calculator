@@ -620,6 +620,7 @@ select.field-error,
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
+  position: relative;
 }
 /* Cell wrapper is transparent on desktop (children sit directly in the grid);
    on mobile it becomes a labelled block (see the responsive section). */
@@ -643,12 +644,19 @@ select.field-error,
   color: var(--text-soft);
   cursor: not-allowed;
 }
+/* Delete (×) overlaid at the row's top-right corner so it claims no grid column and the
+   input boxes can stretch full width. Hidden on the undeletable minimum rows. */
 .layer-row .row-del {
+  position: absolute;
+  top: 3px;
+  right: 5px;
   background: transparent;
   border: none;
   color: var(--danger);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
 }
 .add-layer {
   align-self: flex-start;
@@ -1041,7 +1049,6 @@ table.schedule th {
     grid-template-columns: repeat(4, 1fr) !important;
     gap: 4px;
   }
-  .layers[data-name="paymentLayers"] .layer-header > div:last-child { display: none; }
   .layers[data-name="paymentLayers"] .layer-row { position: relative; }
   .layers[data-name="paymentLayers"] .layer-row .row-del {
     position: absolute;

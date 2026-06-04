@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zb';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zc';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -381,11 +381,12 @@ export function layeredField(opts) {
   wrapper.appendChild(layers);
   if (help) wrapper.appendChild(el('span', { class: 'help' }, help));
 
-  const cols = schema.map(s => s.width || '1fr').join(' ') + ' 36px';
+  // Columns fill the full width (no reserved delete column — the × is overlaid at the
+  // row's corner instead, so the boxes stretch edge-to-edge and stay equal width).
+  const cols = schema.map(s => s.width || '1fr').join(' ');
 
   const header = el('div', { class: 'layer-header', style: `grid-template-columns: ${cols}` });
   schema.forEach(s => header.appendChild(el('div', { class: 'layer-th' }, s.label)));
-  header.appendChild(el('div', {}, ''));
   layers.appendChild(header);
 
   const rows = [];
