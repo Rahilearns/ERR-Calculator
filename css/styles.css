@@ -68,7 +68,6 @@ body {
   padding: 14px 28px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(8px);
 }
 .brand {
   display: flex;
@@ -965,7 +964,11 @@ table.schedule th {
   /* Smaller (still readable) font + tighter spacing so the 2-column rows and
      one-line layer tables fit a phone screen. */
   .field label { font-size: 11.5px; }
-  .field input, .field select, .field textarea { font-size: 13px; padding: 7px 8px; }
+  /* iOS auto-zooms when you focus a text input smaller than 16px — which makes the
+     tap feel slow and shifts the page. Keep editable inputs at 16px (no zoom);
+     <select> doesn't trigger that zoom, so it can stay compact. */
+  .field input, .field textarea { font-size: 16px; padding: 7px 8px; }
+  .field select { font-size: 14px; padding: 7px 8px; }
   /* Keep room on the right for the % suffix so the value never overlaps it */
   .field .percent-input-fixed input { padding: 7px 24px 7px 8px; }
   .form-row { gap: 8px; margin-bottom: 8px; }
