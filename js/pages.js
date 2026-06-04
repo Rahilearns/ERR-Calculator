@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603x';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603x';
+} from './components.js?v=20260603y';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603y';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603x';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603x';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603x';
+} from './calculations.js?v=20260603y';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603y';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603y';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603x';
+} from './excel.js?v=20260603y';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -92,7 +92,7 @@ export function renderRegularLoan(root) {
   section.appendChild(el('div', { class: 'form-row' }, loanAmount, offeredRate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
   const moraSection = el('div', { class: 'form-row full hidden' });
-  moraSection.appendChild(idpField);
+  moraSection.appendChild(el('div', { class: 'sub-card' }, idpField));
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor, paymentMode));
   section.appendChild(el('div', { class: 'form-row' }, totalCof, fundedSecurityType));
@@ -307,7 +307,7 @@ export function renderCustomizedLoan(root) {
   section.appendChild(el('div', { class: 'form-row' }, loanAmount, offeredRate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
   const moraSection = el('div', { class: 'form-row full hidden' });
-  moraSection.appendChild(idpField);
+  moraSection.appendChild(el('div', { class: 'sub-card' }, idpField));
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, loanTenor));
   section.appendChild(el('div', { class: 'sub-card' }, paymentLayers));
@@ -560,7 +560,7 @@ export function renderRateRevisionStructured(root) {
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
   const moraSection = el('div', { class: 'form-row full hidden' });
-  moraSection.appendChild(idpField);
+  moraSection.appendChild(el('div', { class: 'sub-card' }, idpField));
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
   section.appendChild(el('div', { class: 'sub-card' }, rateLayers));
