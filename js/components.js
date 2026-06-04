@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zc';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zd';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;

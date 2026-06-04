@@ -606,14 +606,23 @@ select.field-error,
   align-items: center;
 }
 .layer-header {
-  font-size: 11px;
-  letter-spacing: 0.4px;
-  color: var(--text-mute);
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 0 6px;
+  color: var(--text-soft);
+  /* Match the row's box model (1px border + same padding) so each header box lines up
+     exactly above its input box. */
+  border: 1px solid transparent;
+  padding: 8px 10px;
 }
 .layer-header .layer-th {
   text-align: center;
+  background: var(--bg);            /* same shaded tone as the layer rows */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;               /* same size as the input boxes below */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .layer-row {
   background: var(--bg);
@@ -1035,7 +1044,8 @@ table.schedule th {
 
   /* Layer tables stay on a single line — shrink cells, gaps and font to fit */
   .layer-header, .layer-row { gap: 5px; }
-  .layer-header { font-size: 10px; letter-spacing: 0.2px; padding: 0 2px; }
+  .layer-header { font-size: 10px; padding: 6px; }
+  .layer-header .layer-th { padding: 4px 3px; }
   .layer-row { padding: 6px; }
   .layer-row input, .layer-row select { font-size: 12px; padding: 6px 4px; }
   .layer-row .row-del { font-size: 15px; }
@@ -1046,7 +1056,6 @@ table.schedule th {
      corner so it claims no column. No dropdown arrow; smaller font for this table only. */
   .layers[data-name="paymentLayers"] .layer-header,
   .layers[data-name="paymentLayers"] .layer-row {
-    grid-template-columns: repeat(4, 1fr) !important;
     gap: 4px;
   }
   .layers[data-name="paymentLayers"] .layer-row { position: relative; }
