@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603v';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603v';
+} from './components.js?v=20260603x';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603x';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603v';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603v';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603v';
+} from './calculations.js?v=20260603x';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603x';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603x';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603v';
+} from './excel.js?v=20260603x';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -57,7 +57,7 @@ export function renderRegularLoan(root) {
 
   const idpField = monthBoxesField({
     name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
-    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
 
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
@@ -163,6 +163,7 @@ export function renderRegularLoan(root) {
       paymentMode: inputs.paymentMode,
       moratoriumMonths: moraMonths,
       idpFlags: inputs.idpFlags,
+      capitalizeInterest: inputs.capitalizeInterest,
       cofRate: inputs.totalCof,
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
       // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
@@ -186,6 +187,7 @@ function collectRegularInputs(f) {
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
     idpFlags: f.idpField.getValue(),
+    capitalizeInterest: f.idpField.getCapitalize(),
     loanTenor: f.loanTenor.getValue(),
     paymentMode: f.paymentMode.getValue(),
     totalCof: f.totalCof.getValue(),
@@ -227,7 +229,7 @@ export function renderCustomizedLoan(root) {
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); paymentLayers.applyLayerRules(); });
   const idpField = monthBoxesField({
     name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
-    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
   loanTenor.input.addEventListener('input', () => { refreshLayerOpts(); refresh(); paymentLayers.applyLayerRules(); });
@@ -370,6 +372,7 @@ export function renderCustomizedLoan(root) {
       tenorMonths: inputs.loanTenor,
       moratoriumMonths: mora,
       idpFlags: inputs.idpFlags,
+      capitalizeInterest: inputs.capitalizeInterest,
       cofRate: inputs.totalCof,
       layers: inputs.paymentLayers,
     };
@@ -397,6 +400,7 @@ function collectCustomizedInputs(f) {
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
     idpFlags: f.idpField.getValue(),
+    capitalizeInterest: f.idpField.getCapitalize(),
     loanTenor: tenor,
     paymentLayers: f.paymentLayers.getValue().map(r => ({
       fromInstallment: r.fromInstallment ? Number(r.fromInstallment) : null,
@@ -485,7 +489,7 @@ export function renderRateRevisionStructured(root) {
 
   const idpField = monthBoxesField({
     name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
-    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true,
+    getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
 
   const paymentModality = optionField({
@@ -621,6 +625,7 @@ export function renderRateRevisionStructured(root) {
       disbursementDate: inputs.disbursementDate,
       moratoriumMonths: mora,
       idpFlags: inputs.idpFlags,
+      capitalizeInterest: inputs.capitalizeInterest,
       paymentModality: inputs.paymentModality,
       tenorMonths: inputs.tenorMonths,
       rateLayers: inputs.rateLayers,
@@ -645,6 +650,7 @@ function collectRevisionStructuredInputs(f) {
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
     idpFlags: f.idpField.getValue(),
+    capitalizeInterest: f.idpField.getCapitalize(),
     paymentModality: f.paymentModality.getValue(),
     tenorMonths: f.tenorMonths.getValue(),
     rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.activeRate !== null),
@@ -955,6 +961,7 @@ function restoreDraft(tabKey, fields) {
     if (fields.moratoriumAvail && data.moratoriumAvail) fields.moratoriumAvail.setValue(data.moratoriumAvail);
     if (fields.moratoriumPeriod && data.moratoriumPeriod) fields.moratoriumPeriod.setValue(data.moratoriumPeriod);
     if (fields.idpField && Array.isArray(data.idpFlags)) fields.idpField.setValue(data.idpFlags);
+    if (fields.idpField && data.capitalizeInterest !== undefined) fields.idpField.setCapitalize(data.capitalizeInterest);
     if (fields.loanTenor && data.loanTenor) fields.loanTenor.setValue(data.loanTenor);
     if (fields.tenorMonths && data.tenorMonths) fields.tenorMonths.setValue(data.tenorMonths);
     if (fields.paymentMode && data.paymentMode) fields.paymentMode.setValue(data.paymentMode);

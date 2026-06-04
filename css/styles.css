@@ -566,6 +566,21 @@ select.centered-input { text-align: center; text-align-last: center; }
   white-space: nowrap;
 }
 .select-all-toggle input { accent-color: var(--primary); margin: 0; }
+/* Locked (auto-selected) final moratorium month when capitalizing */
+.month-box.locked { cursor: default; }
+.month-box.locked:hover { border-color: var(--primary); }
+/* "Interest will be capitalized" toggle under the moratorium month boxes */
+.capitalize-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.capitalize-toggle input { accent-color: var(--primary); margin: 0; width: auto; }
 
 /* Error highlight (layer cells) */
 .field-error,

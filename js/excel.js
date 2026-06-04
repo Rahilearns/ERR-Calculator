@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603v';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603x';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -181,6 +181,11 @@ export function downloadVerificationExcel(filename, ctx) {
   const wb = XLSX.utils.book_new();
   const { schedule, inputs, metrics, pageTitle, pageType, params = {} } = ctx;
   const cof = params.cofRate || 0;
+  const mora = params.moratoriumMonths || 0;
+  // When moratorium interest is capitalized, the outstanding grows during the moratorium.
+  // For those rows (and the EPI-principal / funded-security cells that depend on the grown
+  // principal) the verify sheet uses the exact engine value so it matches the app.
+  const capitalize = !!params.capitalizeInterest;
 
   // ----- Schedule sheet (built first so we know row counts)
   // Each row uses cell-referenced formulas where possible so users can trace every calculation.
@@ -274,12 +279,12 @@ export function downloadVerificationExcel(filename, ctx) {
     const epiLayer = epiLayerBySl[r.sl];
     if (!isPaymentRow || !(r.principal > 0)) {
       setCell(wsSched, `D${xr}`, num(r.principal || 0), { z: FMT.ACCOUNTING });
-    } else if (isEPI && epiCapable) {
+    } else if (isEPI && epiCapable && !capitalize) {
       // Structured: one EPI stream over the whole regular tenor.
       // Monthly: Loan / regularMonths ; Quarterly: Loan / (regularMonths/3)
       const denom = isQuarterly ? `(${regularMonthsExpr}/3)` : regularMonthsExpr;
       setCell(wsSched, `D${xr}`, 0, { f: `${LOAN_REF}/${denom}`, z: FMT.ACCOUNTING });
-    } else if (isEPI && epiLayer) {
+    } else if (isEPI && epiLayer && !capitalize) {
       // Customized EPI layer: constant = (layer-start URPA cell) / (periods remaining to maturity)
       setCell(wsSched, `D${xr}`, 0, { f: epiLayer.formula, z: FMT.ACCOUNTING });
     } else {
@@ -295,8 +300,13 @@ export function downloadVerificationExcel(filename, ctx) {
       setCell(wsSched, `B${xr}`, num(r.installment || 0), { z: FMT.ACCOUNTING });
     }
 
-    // URPA (E) = URPA_prev - Principal
-    setCell(wsSched, `E${xr}`, 0, { f: `E${pr}-D${xr}`, z: FMT.ACCOUNTING });
+    // URPA (E) = URPA_prev - Principal. Under capitalization the outstanding grows during
+    // the moratorium, so use the engine value on those rows (guaranteed to match the app).
+    if (capitalize && r.sl >= 1 && r.sl <= mora) {
+      setCell(wsSched, `E${xr}`, num(r.urpa), { z: FMT.ACCOUNTING });
+    } else {
+      setCell(wsSched, `E${xr}`, 0, { f: `E${pr}-D${xr}`, z: FMT.ACCOUNTING });
+    }
 
     // Int Expense (F) = URPA_prev * COF / 12 — accrues every month sl=1..N
     if (COF_REF) {
@@ -358,13 +368,17 @@ export function downloadVerificationExcel(filename, ctx) {
   // Funded Security "EMI/EQI after Moratorium": write the security amount as a traced PMT
   // formula (matches sample B14 = PMT($B$5/12, B9-B8, -B6,,0)).
   const secKind = String(inputs.fundedSecurityType || '');
-  if (idx.csAmount && RATE_REF && LOAN_REF && TENOR_REF && MORA_REF &&
-      (secKind.startsWith('EMI') || secKind.startsWith('EQI'))) {
-    const nMul = idx.numInst ? `*B${idx.numInst}` : '';
-    const pmt = secKind.startsWith('EQI')
-      ? `PMT(${RATE_REF}/4,(${TENOR_REF}-${MORA_REF})/3,-${LOAN_REF},,0)`
-      : `PMT(${RATE_REF}/12,${TENOR_REF}-${MORA_REF},-${LOAN_REF},,0)`;
-    setCell(wsInputs, `B${idx.csAmount}`, 0, { f: `${pmt}${nMul}`, z: FMT.ACCOUNTING });
+  if (idx.csAmount && (secKind.startsWith('EMI') || secKind.startsWith('EQI'))) {
+    if (capitalize) {
+      // Sized on the capitalized (grown) principal — write the derived amount directly.
+      setCell(wsInputs, `B${idx.csAmount}`, num(metrics.derivedSecurityAmount || 0), { z: FMT.ACCOUNTING });
+    } else if (RATE_REF && LOAN_REF && TENOR_REF && MORA_REF) {
+      const nMul = idx.numInst ? `*B${idx.numInst}` : '';
+      const pmt = secKind.startsWith('EQI')
+        ? `PMT(${RATE_REF}/4,(${TENOR_REF}-${MORA_REF})/3,-${LOAN_REF},,0)`
+        : `PMT(${RATE_REF}/12,${TENOR_REF}-${MORA_REF},-${LOAN_REF},,0)`;
+      setCell(wsInputs, `B${idx.csAmount}`, 0, { f: `${pmt}${nMul}`, z: FMT.ACCOUNTING });
+    }
   }
 
   // Results section
@@ -482,6 +496,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const rows = schedule.rows;
   const tenor = params.tenorMonths || (rows.length - 1);
   const mora = params.moratoriumMonths || 0;
+  const capitalize = !!params.capitalizeInterest;
   const pct = (v) => `${+(Number(v) * 100).toFixed(6)}%`; // inline percent literal, e.g. 0.14 -> "14%"
 
   // ----- Schedule sheet -----
@@ -580,8 +595,13 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
     }
 
-    // F URPA = URPA_prev - Principal
-    setCell(ws, `F${xr}`, 0, { f: `F${pr}-E${xr}`, z: FMT.ACCOUNTING });
+    // F URPA = URPA_prev - Principal. Under capitalization the outstanding grows during
+    // the moratorium, so use the engine value on those rows.
+    if (capitalize && r.sl >= 1 && r.sl <= mora) {
+      setCell(ws, `F${xr}`, num(r.urpa), { z: FMT.ACCOUNTING });
+    } else {
+      setCell(ws, `F${xr}`, 0, { f: `F${pr}-E${xr}`, z: FMT.ACCOUNTING });
+    }
     // G Total COF (value), H Int Expense = URPA_prev * COF / 12
     setCell(ws, `G${xr}`, num(r.cof), { z: FMT.PCT2 });
     setCell(ws, `H${xr}`, 0, { f: `F${pr}*G${xr}/12`, z: FMT.ACCOUNTING });

@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603v';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603x';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -267,8 +267,9 @@ export function formatDDMMMYYYY(d) {
 }
 
 // Month boxes — selectable equal-width boxes (max 6/row). Optional "Select all" checkbox.
-export function monthBoxesField({ name, getCount, tooltip = '', label = '', selectAll = true }) {
+export function monthBoxesField({ name, getCount, tooltip = '', label = '', selectAll = true, capitalizable = false }) {
   const wrapper = el('div', { class: 'field' });
+  let capitalize = false;
   if (label) {
     const head = el('div', { class: 'label-row' });
     const lbl = el('label', {}, label);
@@ -301,24 +302,49 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   function render() {
     const n = Math.max(0, getCount() || 0);
     states = Array.from({ length: n }, (_, i) => states[i] ?? false);
+    // When capitalizing, the final moratorium month always capitalizes (locked on).
+    if (capitalize && n > 0) states[n - 1] = true;
     grid.innerHTML = '';
     for (let i = 0; i < n; i++) {
-      const box = el('div', { class: 'month-box' + (states[i] ? ' selected' : ''), 'data-month': i + 1 },
+      const lockedLast = capitalize && i === n - 1;
+      const box = el('div', {
+        class: 'month-box' + (states[i] ? ' selected' : '') + (lockedLast ? ' locked' : ''),
+        'data-month': i + 1,
+      },
         el('div', { class: 'mb-num' }, String(i + 1).padStart(2, '0')),
         el('div', { class: 'mb-lbl' }, 'Month'),
       );
-      box.addEventListener('click', () => {
-        states[i] = !states[i];
-        box.classList.toggle('selected', states[i]);
-        syncAllCb();
-      });
+      if (!lockedLast) {
+        box.addEventListener('click', () => {
+          states[i] = !states[i];
+          box.classList.toggle('selected', states[i]);
+          syncAllCb();
+        });
+      }
       grid.appendChild(box);
     }
     syncAllCb();
   }
+  // Optional "Interest will be capitalized" toggle, rendered under the month boxes.
+  if (capitalizable) {
+    const capRow = el('label', { class: 'capitalize-toggle' });
+    const capCb = el('input', { type: 'checkbox' });
+    capRow.appendChild(capCb);
+    capRow.appendChild(document.createTextNode(' Interest will be capitalized'));
+    wrapper.appendChild(capRow);
+    capCb.addEventListener('change', () => { capitalize = capCb.checked; render(); });
+    wrapper._capCb = capCb;
+  }
+
   wrapper.refresh = render;
   wrapper.getValue = () => states.slice();
   wrapper.setValue = (arr) => { states = (arr || []).slice(); render(); };
+  wrapper.getCapitalize = () => capitalize;
+  wrapper.setCapitalize = (v) => {
+    capitalize = !!v;
+    if (wrapper._capCb) wrapper._capCb.checked = capitalize;
+    render();
+  };
   render();
   return wrapper;
 }

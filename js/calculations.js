@@ -77,6 +77,7 @@ export function buildStructuredSchedule(p) {
     paymentMode,
     moratoriumMonths = 0,
     idpFlags = [],
+    capitalizeInterest = false,
     cofRate = 0,
   } = p;
 
@@ -97,24 +98,38 @@ export function buildStructuredSchedule(p) {
   let accruedReceivable = 0;
   for (let m = 1; m <= moratoriumMonths; m++) {
     const interest = urpa * monthlyRate;
-    const paid = !!idpFlags[m - 1];
     let installment = 0;
-    if (paid) {
-      installment = interest + accruedReceivable;
-      accruedReceivable = 0;
-    } else {
+    if (capitalizeInterest) {
+      // Interest is not paid in cash; it accrues and is capitalized (folded into
+      // principal) at each ticked month and always at the final moratorium month.
+      // Subsequent interest then accrues on the larger principal (compounding).
       accruedReceivable += interest;
+      if (!!idpFlags[m - 1] || m === moratoriumMonths) {
+        urpa += accruedReceivable;
+        accruedReceivable = 0;
+      }
+    } else {
+      const paid = !!idpFlags[m - 1];
+      if (paid) {
+        installment = interest + accruedReceivable;
+        accruedReceivable = 0;
+      } else {
+        accruedReceivable += interest;
+      }
     }
     rows.push({
       sl: m, installment, interest, principal: 0, urpa,
       interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
     });
   }
+  // Post-moratorium principal (grown by any capitalized interest). The regular
+  // installments below amortise this amount; funded-security sizing uses it too.
+  const capitalizedPrincipal = urpa;
 
   // Regular installments
   if (regularPeriods <= 0) {
     applyIntExpenseAccrual(rows, monthlyCof);
-    return { rows, accruedReceivable };
+    return { rows, accruedReceivable, capitalizedPrincipal };
   }
 
   // Compute the "base" regular installment without accrued-receivable add-on (used as the EMI/installment-size for security calc)
@@ -185,7 +200,7 @@ export function buildStructuredSchedule(p) {
     }
   }
   applyIntExpenseAccrual(rows, monthlyCof);
-  return { rows, accruedReceivable, baseInstallment };
+  return { rows, accruedReceivable, baseInstallment, capitalizedPrincipal };
 }
 
 // Customized Loan
@@ -194,6 +209,7 @@ export function buildCustomizedSchedule(p) {
     loanAmount, ratePerYear, tenorMonths,
     moratoriumMonths = 0,
     idpFlags = [],
+    capitalizeInterest = false,
     cofRate = 0,
     layers,
   } = p;
@@ -208,19 +224,32 @@ export function buildCustomizedSchedule(p) {
   let accruedReceivable = 0;
   for (let m = 1; m <= moratoriumMonths; m++) {
     const interest = urpa * monthlyRate;
-    const paid = !!idpFlags[m - 1];
     let installment = 0;
-    if (paid) {
-      installment = interest + accruedReceivable;
-      accruedReceivable = 0;
-    } else {
+    if (capitalizeInterest) {
+      // Capitalize accrued interest into principal at each ticked month and at the
+      // final moratorium month; later interest accrues on the larger principal.
       accruedReceivable += interest;
+      if (!!idpFlags[m - 1] || m === moratoriumMonths) {
+        urpa += accruedReceivable;
+        accruedReceivable = 0;
+      }
+    } else {
+      const paid = !!idpFlags[m - 1];
+      if (paid) {
+        installment = interest + accruedReceivable;
+        accruedReceivable = 0;
+      } else {
+        accruedReceivable += interest;
+      }
     }
     rows.push({
       sl: m, installment, interest, principal: 0, urpa,
       interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
     });
   }
+  // Post-moratorium principal (grown by any capitalized interest); the payment layers
+  // below amortise this amount and funded-security sizing uses it.
+  const capitalizedPrincipal = urpa;
 
   // Layers' fromInstallment/toInstallment are ABSOLUTE month numbers (Month NN values)
   // E.g. if moratorium=6 and tenor=36, layers have from=7, to=36
@@ -333,7 +362,7 @@ export function buildCustomizedSchedule(p) {
     }
   }
   applyIntExpenseAccrual(rows, monthlyCof);
-  return { rows, accruedReceivable, layerInstallments };
+  return { rows, accruedReceivable, layerInstallments, capitalizedPrincipal };
 }
 
 // ============================================================
@@ -354,13 +383,16 @@ export function computeMetrics(schedule, params) {
   // These are the hypothetical EMI/EQI size after moratorium, independent of the actual layers.
   const kind = String(securityKind || '');
   const regularMonths = Math.max(0, tenorMonths - moratoriumMonths);
+  // When moratorium interest is capitalized the post-moratorium principal is larger,
+  // so the funded-security installment is sized on that (grown) principal.
+  const basePrincipal = schedule.capitalizedPrincipal || loanAmount;
   if (kind.startsWith('EMI') || kind.startsWith('EQI') || kind === 'Installment') {
     let unitInstallment = 0;
     if (kind.startsWith('EMI')) {
-      unitInstallment = regularMonths > 0 ? PMT(ratePerYear / 12, regularMonths, -loanAmount) : 0;
+      unitInstallment = regularMonths > 0 ? PMT(ratePerYear / 12, regularMonths, -basePrincipal) : 0;
     } else if (kind.startsWith('EQI')) {
       const q = Math.max(1, Math.round(regularMonths / 3));
-      unitInstallment = PMT(ratePerYear / 4, q, -loanAmount);
+      unitInstallment = PMT(ratePerYear / 4, q, -basePrincipal);
     } else if (schedule.baseInstallment) {
       // Structured Equal-Principal: first installment size
       unitInstallment = schedule.baseInstallment;
@@ -415,6 +447,7 @@ export function buildRateRevisionStructured(p) {
     disbursementDate,
     moratoriumMonths = 0,
     idpFlags = [],
+    capitalizeInterest = false,
     paymentModality,
     tenorMonths,
     rateLayers,
@@ -492,12 +525,22 @@ export function buildRateRevisionStructured(p) {
     let installment = 0, interest = 0, principal = 0;
     if (m <= moratoriumMonths) {
       interest = urpa * monthlyRate;
-      const paid = !!idpFlags[m - 1];
-      if (paid) {
-        installment = interest + accruedReceivable;
-        accruedReceivable = 0;
-      } else {
+      if (capitalizeInterest) {
+        // Capitalize accrued interest into principal at each ticked month and at the
+        // final moratorium month; later interest accrues on the larger principal.
         accruedReceivable += interest;
+        if (!!idpFlags[m - 1] || m === moratoriumMonths) {
+          urpa += accruedReceivable;
+          accruedReceivable = 0;
+        }
+      } else {
+        const paid = !!idpFlags[m - 1];
+        if (paid) {
+          installment = interest + accruedReceivable;
+          accruedReceivable = 0;
+        } else {
+          accruedReceivable += interest;
+        }
       }
     } else {
       const monthsSinceMora = m - moratoriumMonths;
