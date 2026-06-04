@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603i';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603j';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -127,6 +127,7 @@ export function downloadScheduleAsPDF(filename, schedule, meta = {}) {
   if (hasIDP) foot.push(fmtM(tAcc));
   doc.autoTable({
     head: [headers], body, foot: [foot], startY: y,
+    showFoot: 'lastPage',
     styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle' },
     headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center', valign: 'middle' },
     footStyles: { fillColor: [230, 235, 255], textColor: 20, fontStyle: 'bold', halign: 'center' },
@@ -933,6 +934,7 @@ export function downloadReportPDF(filename, ctx) {
   doc.autoTable({
     head: [headers], body, foot: [schedFoot],
     startY: y,
+    showFoot: 'lastPage',
     styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle' },
     headStyles: { fillColor: [37, 70, 224], textColor: 255, halign: 'center' },
     footStyles: { fillColor: [230, 235, 255], textColor: 20, fontStyle: 'bold', halign: 'center' },

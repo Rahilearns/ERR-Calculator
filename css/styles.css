@@ -252,6 +252,23 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .primary-btn:active { transform: translateY(1px); }
 .primary-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Verify Calculation — soothing green, kept visually distinct from the blue Calculate ERR. */
+.verify-btn {
+  background: #2f9e6b;
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.verify-btn:hover { filter: brightness(1.08); }
+.verify-btn:active { transform: translateY(1px); }
+[data-theme="dark"] .verify-btn { background: #35b07c; }
+
 .secondary-btn {
   background: var(--bg-soft);
   color: var(--text);
