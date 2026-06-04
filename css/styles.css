@@ -1010,9 +1010,13 @@ table.schedule th {
     line-height: 1;
     padding: 0 2px;
   }
-  .layers[data-name="paymentLayers"] .layer-row input,
   .layers[data-name="paymentLayers"] .layer-row select {
     font-size: 10.5px;
+    padding: 5px 3px;
+  }
+  /* The Custom Principal text input stays 16px so iOS/WebKit doesn't zoom on focus */
+  .layers[data-name="paymentLayers"] .layer-row input {
+    font-size: 16px;
     padding: 5px 3px;
   }
   .layers[data-name="paymentLayers"] .layer-row select {
