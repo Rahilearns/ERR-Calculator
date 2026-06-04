@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603n';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603o';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -391,7 +391,7 @@ export function layeredField(opts) {
     if (s.type === 'option') {
       inp = el('select', { class: 'centered-input' });
       const opts = typeof s.options === 'function' ? s.options() : s.options;
-      if (s.allowEmpty) inp.appendChild(el('option', { value: '' }, s.placeholder || '— select —'));
+      if (s.allowEmpty) inp.appendChild(el('option', { value: '' }, s.placeholder ?? '— select —'));
       opts.forEach((o) => {
         const val = typeof o === 'string' ? o : o.value;
         const txt = typeof o === 'string' ? o : o.label;
@@ -657,7 +657,7 @@ export function layeredField(opts) {
           const inp = inputs[s.key];
           const prev = inp.value;
           inp.innerHTML = '';
-          if (s.allowEmpty) inp.appendChild(el('option', { value: '' }, s.placeholder || '— select —'));
+          if (s.allowEmpty) inp.appendChild(el('option', { value: '' }, s.placeholder ?? '— select —'));
           s.options().forEach((o) => {
             const val = typeof o === 'string' ? o : o.value;
             const txt = typeof o === 'string' ? o : o.label;

@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603n';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603n';
+} from './components.js?v=20260603o';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603o';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603n';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603n';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603n';
+} from './calculations.js?v=20260603o';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603o';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603o';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603n';
+} from './excel.js?v=20260603o';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -245,7 +245,7 @@ export function renderCustomizedLoan(root) {
     label: 'Payment Layers',
     name: 'paymentLayers',
     schema: [
-      { key: 'fromInstallment', label: 'From Date', type: 'option', options: fromOptions, allowEmpty: true, placeholder: '— select —', width: '1fr', readOnly: true },
+      { key: 'fromInstallment', label: 'From Date', type: 'option', options: fromOptions, allowEmpty: true, placeholder: '', width: '1fr', readOnly: true },
       { key: 'toInstallment', label: 'To Date', type: 'option', options: toOptions, allowEmpty: true, placeholder: '— select —', width: '1fr' },
       { key: 'paymentType', label: 'Payment Type', type: 'option', options: [
           'Customized Principal', 'EMI', 'EQI',

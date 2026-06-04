@@ -981,13 +981,23 @@ table.schedule th {
   .layer-row .row-del { font-size: 15px; }
   .add-layer { font-size: 12px; padding: 7px 10px; }
 
-  /* Payment Layers (Loan Facilities — Customized): 4 equal boxes spanning the full
-     width (reclaiming the delete-column space), no dropdown arrow, and a smaller font
-     for THIS table only so the values stay visible. */
+  /* Payment Layers (Loan Facilities — Customized): 4 equal boxes spanning the FULL
+     width. The delete (×) is lifted out of the grid and overlaid at the row's top-right
+     corner so it claims no column. No dropdown arrow; smaller font for this table only. */
   .layers[data-name="paymentLayers"] .layer-header,
   .layers[data-name="paymentLayers"] .layer-row {
-    grid-template-columns: repeat(4, 1fr) 18px !important;
+    grid-template-columns: repeat(4, 1fr) !important;
     gap: 4px;
+  }
+  .layers[data-name="paymentLayers"] .layer-header > div:last-child { display: none; }
+  .layers[data-name="paymentLayers"] .layer-row { position: relative; }
+  .layers[data-name="paymentLayers"] .layer-row .row-del {
+    position: absolute;
+    top: 0;
+    right: 2px;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
   }
   .layers[data-name="paymentLayers"] .layer-row input,
   .layers[data-name="paymentLayers"] .layer-row select {
@@ -1000,7 +1010,6 @@ table.schedule th {
     text-align-last: center;
   }
   .layers[data-name="paymentLayers"] .layer-header { font-size: 8.5px; letter-spacing: 0; }
-  .layers[data-name="paymentLayers"] .layer-row .row-del { font-size: 13px; }
 
   .results-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .metric-card { padding: 12px; }
