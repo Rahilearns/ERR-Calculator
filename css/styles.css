@@ -954,7 +954,17 @@ table.schedule th {
   /* Mobile shows Loan Facilities only; Rate Revision stays desktop-only */
   .tab-btn[data-tab="revisionStructured"],
   .tab-btn[data-tab="revisionCustomized"] { display: none; }
-  .tab-btn { font-size: 11.5px; }
+  /* The two Loan Facilities tabs sit side by side; long labels wrap to two lines */
+  .tab-btn {
+    flex: 1 1 calc(50% - 3px);
+    font-size: 11.5px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: center;
+    line-height: 1.25;
+    padding: 8px;
+  }
 
   /* Smaller (still readable) font + tighter spacing so the 2-column rows and
      one-line layer tables fit a phone screen. */
@@ -970,6 +980,27 @@ table.schedule th {
   .layer-row input, .layer-row select { font-size: 12px; padding: 6px 4px; }
   .layer-row .row-del { font-size: 15px; }
   .add-layer { font-size: 12px; padding: 7px 10px; }
+
+  /* Payment Layers (Loan Facilities — Customized): 4 equal boxes spanning the full
+     width (reclaiming the delete-column space), no dropdown arrow, and a smaller font
+     for THIS table only so the values stay visible. */
+  .layers[data-name="paymentLayers"] .layer-header,
+  .layers[data-name="paymentLayers"] .layer-row {
+    grid-template-columns: repeat(4, 1fr) 18px !important;
+    gap: 4px;
+  }
+  .layers[data-name="paymentLayers"] .layer-row input,
+  .layers[data-name="paymentLayers"] .layer-row select {
+    font-size: 10.5px;
+    padding: 5px 3px;
+  }
+  .layers[data-name="paymentLayers"] .layer-row select {
+    -webkit-appearance: none;
+    appearance: none;
+    text-align-last: center;
+  }
+  .layers[data-name="paymentLayers"] .layer-header { font-size: 8.5px; letter-spacing: 0; }
+  .layers[data-name="paymentLayers"] .layer-row .row-del { font-size: 13px; }
 
   .results-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .metric-card { padding: 12px; }
