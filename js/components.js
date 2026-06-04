@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603l';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603m';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -400,6 +400,8 @@ export function layeredField(opts) {
       if (values[s.key] !== undefined && values[s.key] !== null) inp.value = values[s.key];
       else if (s.allowEmpty) inp.value = '';
       inp.addEventListener('change', () => { inp.dataset.userSet = '1'; fireChange(); });
+      // Auto-derived, user-uneditable field (still set programmatically by applyLayerRules).
+      if (s.readOnly) { inp.disabled = true; inp.classList.add('readonly-cell'); }
     } else if (s.type === 'date') {
       inp = el('input', { type: 'text', placeholder: 'dd-Mmm-yyyy', class: 'centered-input date-input' });
       if (values[s.key]) inp.value = values[s.key];

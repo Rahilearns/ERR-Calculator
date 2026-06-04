@@ -1,11 +1,11 @@
 // App controller: tabs, theme, compare view
-import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603l';
+import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603m';
 import {
   renderRegularLoan, renderCustomizedLoan,
   renderRateRevisionStructured, renderRateRevisionCustomized,
-} from './pages.js?v=20260603l';
-import { listSummaries, deleteSummary } from './storage.js?v=20260603l';
-import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603l';
+} from './pages.js?v=20260603m';
+import { listSummaries, deleteSummary } from './storage.js?v=20260603m';
+import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603m';
 
 const root = document.getElementById('app-root');
 const compareBtn = document.getElementById('compare-btn');

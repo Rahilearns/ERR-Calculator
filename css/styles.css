@@ -599,6 +599,13 @@ select.field-error,
   font-size: 14px;
 }
 .layer-row select option { color: var(--text); background: var(--bg-elev); }
+/* Auto-derived (read-only) layer field — muted but still clearly readable. */
+.layer-row select.readonly-cell {
+  opacity: 1;
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  cursor: not-allowed;
+}
 .layer-row .row-del {
   background: transparent;
   border: none;
