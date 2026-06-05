@@ -609,10 +609,12 @@ select.field-error,
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-soft);
-  /* Match the row's box model (1px border + same padding) so each header box lines up
-     exactly above its input box. */
-  border: 1px solid transparent;
-  padding: 8px 10px;
+  /* Transparent side borders + matching horizontal padding line each header box up above
+     its input box. No vertical padding, so the gap below the header equals the gap
+     between rows (the .layers flex gap). */
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  padding: 0 10px;
 }
 .layer-header .layer-th {
   text-align: center;
@@ -1044,7 +1046,7 @@ table.schedule th {
 
   /* Layer tables stay on a single line — shrink cells, gaps and font to fit */
   .layer-header, .layer-row { gap: 5px; }
-  .layer-header { font-size: 10px; padding: 6px; }
+  .layer-header { font-size: 10px; padding: 0 6px; }
   .layer-header .layer-th { padding: 4px 3px; }
   .layer-row { padding: 6px; }
   .layer-row input, .layer-row select { font-size: 12px; padding: 6px 4px; }
