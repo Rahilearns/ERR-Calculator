@@ -461,7 +461,7 @@ select.centered-input { text-align: center; text-align-last: center; }
 }
 .percent-input-fixed.empty .percent-suffix-fixed { display: none; }
 .percent-input-fixed.inline input {
-  background: var(--bg-elev);
+  background: var(--bg);            /* match the other layer boxes (Active Rate cell) */
   padding: 8px 24px 8px 10px;
 }
 
@@ -609,12 +609,6 @@ select.field-error,
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-soft);
-  /* Transparent side borders + matching horizontal padding line each header box up above
-     its input box. No vertical padding, so the gap below the header equals the gap
-     between rows (the .layers flex gap). */
-  border-left: 1px solid transparent;
-  border-right: 1px solid transparent;
-  padding: 0 10px;
 }
 .layer-header .layer-th {
   text-align: center;
@@ -627,10 +621,8 @@ select.field-error,
   text-overflow: ellipsis;
 }
 .layer-row {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  /* No strip background/border/padding — the input boxes are the visible boxes and span
+     the full width, matching the header boxes above them. */
   position: relative;
 }
 /* Cell wrapper is transparent on desktop (children sit directly in the grid);
@@ -638,7 +630,7 @@ select.field-error,
 .layer-cell { display: contents; }
 .layer-row input,
 .layer-row select {
-  background: var(--bg-elev);
+  background: var(--bg);            /* same shaded tone as the header boxes */
   border: 1px solid var(--border);
   color: var(--text);
   padding: 8px 10px;
@@ -651,7 +643,7 @@ select.field-error,
 /* Auto-derived (read-only) layer field — muted but still clearly readable. */
 .layer-row select.readonly-cell {
   opacity: 1;
-  background: var(--bg-soft);
+  background: var(--bg);            /* match the other boxes; muted via text + cursor only */
   color: var(--text-soft);
   cursor: not-allowed;
 }
@@ -1046,9 +1038,8 @@ table.schedule th {
 
   /* Layer tables stay on a single line — shrink cells, gaps and font to fit */
   .layer-header, .layer-row { gap: 5px; }
-  .layer-header { font-size: 10px; padding: 0 6px; }
-  .layer-header .layer-th { padding: 4px 3px; }
-  .layer-row { padding: 6px; }
+  .layer-header { font-size: 10px; }
+  .layer-header .layer-th { padding: 6px 4px; }
   .layer-row input, .layer-row select { font-size: 12px; padding: 6px 4px; }
   .layer-row .row-del { font-size: 15px; }
   .add-layer { font-size: 12px; padding: 7px 10px; }
