@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zm';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zm';
+} from './components.js?v=20260603zn';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zn';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zm';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zm';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zm';
+} from './calculations.js?v=20260603zn';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zn';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zn';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zm';
+} from './excel.js?v=20260603zn';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -266,7 +266,7 @@ export function renderCustomizedLoan(root) {
       { key: 'fromInstallment', label: 'From Date', type: 'option', options: fromOptions, allowEmpty: true, placeholder: '', width: '0.8fr', readOnly: true },
       { key: 'toInstallment', label: 'To Date', type: 'option', options: toOptions, allowEmpty: true, placeholder: '— select —', width: '0.8fr' },
       { key: 'paymentType', label: 'Payment Type', type: 'option', allowEmpty: true, placeholder: '— select —', options: [
-          'Customized Principal', 'EMI', 'EQI',
+          'Customized Principal (Monthly)', 'Customized Principal (Quarterly)', 'EMI', 'EQI',
           'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)',
         ], width: '1.2fr' },
       { key: 'customPrincipal', label: 'Custom Principal', type: 'number', width: '1.2fr' },
@@ -289,7 +289,7 @@ export function renderCustomizedLoan(root) {
       paymentLayers.rows.forEach((row) => {
         const ptype = row.inputs.paymentType.value;
         const cp = row.inputs.customPrincipal;
-        const isCustom = ptype === 'Customized Principal';
+        const isCustom = !!ptype && ptype.startsWith('Customized Principal');
         cp.disabled = !isCustom;
         cp.style.opacity = isCustom ? '1' : '0.4';
         if (!isCustom) cp.value = '';
@@ -453,8 +453,8 @@ function validateCustomized(i) {
     if (L.toInstallment < L.fromInstallment) return `Layer ${k + 1}: To must be ≥ From.`;
     if (L.fromInstallment < startMonth) return `Layer ${k + 1}: From must be ≥ Month ${String(startMonth).padStart(2, '0')}.`;
     if (L.toInstallment > endMonth) return `Layer ${k + 1}: To must be ≤ Month ${String(endMonth).padStart(2, '0')}.`;
-    if (L.paymentType === 'Customized Principal' && !L.customPrincipal)
-      return `Layer ${k + 1}: enter Custom Principal for "Customized Principal" type.`;
+    if (L.paymentType && L.paymentType.startsWith('Customized Principal') && !L.customPrincipal)
+      return `Layer ${k + 1}: enter Custom Principal for the "${L.paymentType}" type.`;
   }
   // Sort and check for overlaps / gaps
   const sorted = i.paymentLayers.slice().sort((a, b) => a.fromInstallment - b.fromInstallment);

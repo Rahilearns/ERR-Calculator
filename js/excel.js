@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zm';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zn';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -263,7 +263,7 @@ export function downloadVerificationExcel(filename, ctx) {
     }
 
     const isPaymentRow = (r.installment || 0) > 0;
-    const isQuarterly = r.paymentType === 'EQI' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
+    const isQuarterly = r.paymentType === 'EQI' || r.paymentType === 'Equal Principal + Interest (Quarterly)' || r.paymentType === 'Customized Principal (Quarterly)';
     const isEPI = r.paymentType === 'Equal Principal + Interest (Monthly)' || r.paymentType === 'Equal Principal + Interest (Quarterly)';
     const divisor = (isQuarterly && r.interest > 0) ? 4 : 12;
 

@@ -268,7 +268,7 @@ export function buildCustomizedSchedule(p) {
     let pmt = 0;
     let ppy = 12;
     if (L.paymentType === 'EMI' || L.paymentType === 'Equal Principal + Interest (Monthly)') ppy = 12;
-    else if (L.paymentType === 'EQI' || L.paymentType === 'Equal Principal + Interest (Quarterly)') ppy = 4;
+    else if (L.paymentType === 'EQI' || L.paymentType === 'Equal Principal + Interest (Quarterly)' || L.paymentType === 'Customized Principal (Quarterly)') ppy = 4;
 
     // Equal Principal + Interest layers: the per-period principal is CONSTANT and sized over
     // the periods remaining to MATURITY (not just the layer's own span). So a layer that ends
@@ -303,7 +303,7 @@ export function buildCustomizedSchedule(p) {
     } else if (L.paymentType === 'Equal Principal + Interest (Quarterly)' && !layerInstallments['Installment']) {
       const qPeriods = Math.max(1, countQuarterlyMonths(from, to));
       layerInstallments['Installment'] = (urpa / qPeriods) + urpa * (ratePerYear / 4);
-    } else if (L.paymentType === 'Customized Principal' && !layerInstallments['Customized']) {
+    } else if (L.paymentType && L.paymentType.startsWith('Customized Principal') && !layerInstallments['Customized']) {
       layerInstallments['Customized'] = (L.customPrincipal || 0) + urpa * monthlyRate;
     }
 
@@ -315,10 +315,19 @@ export function buildCustomizedSchedule(p) {
       const lastMonthInLayer = (m === to);
       const isLastInstallmentOfLoan = isLastLayer && lastMonthInLayer;
 
-      if (L.paymentType === 'Customized Principal') {
+      if (L.paymentType === 'Customized Principal (Monthly)') {
         interest = urpa * monthlyRate;
         principal = Math.min(L.customPrincipal || 0, urpa);
         installment = principal + interest;
+      } else if (L.paymentType === 'Customized Principal (Quarterly)') {
+        // Custom principal paid on quarterly months (m%3===0: Mar/Jun/Sep/Dec). The interest
+        // accrued since the last quarterly payment (one quarter on the unchanged balance) is
+        // paid alongside it; non-payment months carry it forward to the next quarterly row.
+        if (m % 3 === 0) {
+          interest = urpa * (ratePerYear / 4);
+          principal = Math.min(L.customPrincipal || 0, urpa);
+          installment = principal + interest;
+        }
       } else if (L.paymentType === 'EMI') {
         interest = urpa * monthlyRate;
         principal = pmt - interest;
