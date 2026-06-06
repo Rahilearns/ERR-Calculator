@@ -287,11 +287,15 @@ export function buildCustomizedSchedule(p) {
     }
 
     if (L.paymentType === 'EMI') {
-      pmt = PMT(ratePerYear / 12, count, -urpa);
+      // Size the EMI annuity over the periods remaining to MATURITY (not just this layer's
+      // span), so a layer that ends before maturity only partially amortises and leaves a
+      // balance for the next layer (matching the Equal-Principal layer behaviour).
+      pmt = PMT(ratePerYear / 12, Math.max(1, tenorMonths - from + 1), -urpa);
       if (!layerInstallments['EMI']) layerInstallments['EMI'] = pmt;
     } else if (L.paymentType === 'EQI') {
-      // Count payment months in [from..to] where m%3===0
-      const qCount = countQuarterlyMonths(from, to);
+      // Quarterly payments remaining to MATURITY (m%3===0 from this layer's start through
+      // the loan tenor), so an EQI layer ending before maturity only partially amortises.
+      const qCount = countQuarterlyMonths(from, tenorMonths);
       pmt = PMT(ratePerYear / 4, Math.max(1, qCount), -urpa);
       if (!layerInstallments['EQI']) layerInstallments['EQI'] = pmt;
     } else if (L.paymentType === 'Equal Principal + Interest (Monthly)' && !layerInstallments['Installment']) {
