@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zk';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zk';
+} from './components.js?v=20260603zl';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zl';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zk';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zk';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zk';
+} from './calculations.js?v=20260603zl';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zl';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zl';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zk';
+} from './excel.js?v=20260603zl';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -205,6 +205,8 @@ function validateRegular(i) {
   if (i.offeredRate === null) return fail('Enter Offered Rate.');
   if (!i.moratoriumAvail) return fail('Select whether a moratorium is available.');
   if (i.moratoriumAvail === 'Yes' && !i.moratoriumPeriod) return fail('Enter Moratorium Period.');
+  if (i.moratoriumAvail === 'Yes' && i.moratoriumPeriod && i.capitalizeInterest == null)
+    return fail('Select whether moratorium interest is paid or capitalized.');
   if (!i.loanTenor) return fail('Enter Loan Tenor.');
   if (i.moratoriumAvail === 'Yes' && i.loanTenor <= i.moratoriumPeriod) return fail('Loan Tenor must exceed Moratorium Period.');
   if (!i.paymentMode) return fail('Select a Payment Mode.');
@@ -433,6 +435,7 @@ function validateCustomized(i) {
   if (i.moratoriumAvail === 'Yes') {
     if (!i.moratoriumPeriod) return 'Enter Moratorium Period.';
     if (i.loanTenor <= i.moratoriumPeriod) return 'Loan Tenor must exceed Moratorium Period.';
+    if (i.capitalizeInterest == null) return 'Select whether moratorium interest is paid or capitalized.';
   }
   if (!i.paymentLayers.length) return 'Add at least one Payment Layer.';
   // Layer count cap
@@ -614,6 +617,8 @@ export function renderRateRevisionStructured(root) {
     if (dow === 5 || dow === 6) return toast('Disbursement Date cannot be Friday or Saturday.', 'error');
     if (!inputs.tenorMonths) return toast('Enter Loan Tenor.', 'error');
     if (!inputs.moratoriumAvail) return toast('Select whether a moratorium is given at disbursement.', 'error');
+    if (inputs.moratoriumAvail === 'Yes' && inputs.moratoriumPeriod && inputs.capitalizeInterest == null)
+      return toast('Select whether moratorium interest is paid or capitalized.', 'error');
     if (!inputs.paymentModality) return toast('Select a Payment Modality.', 'error');
     if (!inputs.rateLayers.length) return toast('Add at least one Lending Rate Layer.', 'error');
 

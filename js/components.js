@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zk';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zl';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -269,7 +269,7 @@ export function formatDDMMMYYYY(d) {
 // Month boxes — selectable equal-width boxes (max 6/row). Optional "Select all" checkbox.
 export function monthBoxesField({ name, getCount, tooltip = '', label = '', selectAll = true, capitalizable = false }) {
   const wrapper = el('div', { class: 'field' });
-  let capitalize = false;
+  let capitalize = null; // null = no mode chosen yet; false = paid; true = capitalized
   if (label) {
     const head = el('div', { class: 'label-row' });
     const lbl = el('label', {}, label);
@@ -348,8 +348,8 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       'end of the moratorium; interest then accrues on the larger principal.'
     );
     wrapper.appendChild(el('div', { class: 'mora-mode' }, paidLabel, capLabel, info));
-    paidRadio.checked = !capitalize;
-    capRadio.checked = capitalize;
+    paidRadio.checked = capitalize === false;
+    capRadio.checked = capitalize === true;
     paidRadio.addEventListener('change', () => { if (paidRadio.checked) { capitalize = false; render(); } });
     capRadio.addEventListener('change', () => { if (capRadio.checked) { capitalize = true; render(); } });
     wrapper._paidRadio = paidRadio;
@@ -361,9 +361,9 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   wrapper.setValue = (arr) => { states = (arr || []).slice(); render(); };
   wrapper.getCapitalize = () => capitalize;
   wrapper.setCapitalize = (v) => {
-    capitalize = !!v;
-    if (wrapper._capRadio) wrapper._capRadio.checked = capitalize;
-    if (wrapper._paidRadio) wrapper._paidRadio.checked = !capitalize;
+    capitalize = (v === true || v === false) ? v : null;
+    if (wrapper._capRadio) wrapper._capRadio.checked = capitalize === true;
+    if (wrapper._paidRadio) wrapper._paidRadio.checked = capitalize === false;
     render();
   };
   render();
