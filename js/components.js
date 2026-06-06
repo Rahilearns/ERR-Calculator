@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zh';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zj';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -325,15 +325,35 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
     }
     syncAllCb();
   }
-  // Optional "Interest will be capitalized" toggle, rendered under the month boxes.
+  // Mode selector under the month boxes: "Interest will be paid" vs "Interest will be
+  // capitalized" (mutually exclusive). Defaults to "paid" — the legacy behaviour — so a
+  // new user always sees, explicitly, how the ticked months are treated.
   if (capitalizable) {
-    const capRow = el('label', { class: 'capitalize-toggle' });
-    const capCb = el('input', { type: 'checkbox' });
-    capRow.appendChild(capCb);
-    capRow.appendChild(document.createTextNode(' Interest will be capitalized'));
-    wrapper.appendChild(capRow);
-    capCb.addEventListener('change', () => { capitalize = capCb.checked; render(); });
-    wrapper._capCb = capCb;
+    const groupName = 'moraMode_' + nextId();
+    const paidLabel = el('label', { class: 'mora-mode-opt' });
+    const paidRadio = el('input', { type: 'radio', name: groupName });
+    paidLabel.appendChild(paidRadio);
+    paidLabel.appendChild(document.createTextNode(' Interest will be paid'));
+    const capLabel = el('label', { class: 'mora-mode-opt' });
+    const capRadio = el('input', { type: 'radio', name: groupName });
+    capLabel.appendChild(capRadio);
+    capLabel.appendChild(document.createTextNode(' Interest will be capitalized'));
+    const info = infoIcon(
+      'Choose how interest during the moratorium is handled.\n\n' +
+      '• Interest will be paid: the ticked months are the months the borrower actually pays ' +
+      'interest. Interest for unticked months accrues and is collected at the next ticked ' +
+      '(paid) month, or added to the first installment after the moratorium.\n\n' +
+      '• Interest will be capitalized: no interest is paid during the moratorium. Accrued ' +
+      'interest is added to the principal (capitalized) at each ticked month and always at the ' +
+      'end of the moratorium; interest then accrues on the larger principal.'
+    );
+    wrapper.appendChild(el('div', { class: 'mora-mode' }, paidLabel, capLabel, info));
+    paidRadio.checked = !capitalize;
+    capRadio.checked = capitalize;
+    paidRadio.addEventListener('change', () => { if (paidRadio.checked) { capitalize = false; render(); } });
+    capRadio.addEventListener('change', () => { if (capRadio.checked) { capitalize = true; render(); } });
+    wrapper._paidRadio = paidRadio;
+    wrapper._capRadio = capRadio;
   }
 
   wrapper.refresh = render;
@@ -342,7 +362,8 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   wrapper.getCapitalize = () => capitalize;
   wrapper.setCapitalize = (v) => {
     capitalize = !!v;
-    if (wrapper._capCb) wrapper._capCb.checked = capitalize;
+    if (wrapper._capRadio) wrapper._capRadio.checked = capitalize;
+    if (wrapper._paidRadio) wrapper._paidRadio.checked = !capitalize;
     render();
   };
   render();
