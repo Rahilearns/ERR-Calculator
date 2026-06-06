@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zj';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zj';
+} from './components.js?v=20260603zk';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zk';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zj';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zj';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zj';
+} from './calculations.js?v=20260603zk';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zk';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zk';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zj';
+} from './excel.js?v=20260603zk';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -47,7 +47,8 @@ export function renderRegularLoan(root) {
   const offeredRate = percentField({ label: 'Offered Rate', name: 'offeredRate' });
 
   const moratoriumAvail = optionField({
-    label: 'Moratorium Available?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No',
+    label: 'Moratorium Available?', name: 'moratoriumAvail',
+    options: [{ label: '— select —', value: '' }, 'No', 'Yes'], value: '',
     onChange: refresh,
   });
   const moratoriumPeriod = numberField({
@@ -63,8 +64,8 @@ export function renderRegularLoan(root) {
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
   const paymentMode = optionField({
     label: 'Payment Mode', name: 'paymentMode',
-    options: ['EMI', 'EQI', 'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)'],
-    value: 'EMI',
+    options: [{ label: '— select —', value: '' }, 'EMI', 'EQI', 'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)'],
+    value: '',
     onChange: () => refresh(),
   });
 
@@ -76,11 +77,11 @@ export function renderRegularLoan(root) {
     const opts = ['FDR', 'Cash Security'];
     if (pm === 'EMI') opts.push('EMI after Moratorium');
     else if (pm === 'EQI') opts.push('EQI after Moratorium');
-    else opts.push('Installment');
-    return opts;
+    else if (pm) opts.push('Installment');
+    return [{ label: '— select —', value: '' }, ...opts];
   }
   const fundedSecurityType = optionField({
-    label: 'Funded Security Type', name: 'fundedSecurityType', options: securityOptions(), value: 'FDR',
+    label: 'Funded Security Type', name: 'fundedSecurityType', options: securityOptions(), value: '',
     onChange: refresh,
   });
   setTwoLineLabel(fundedSecurityType, 'Funded Security', 'Type');
@@ -105,6 +106,7 @@ export function renderRegularLoan(root) {
   function rebuildSecurityRow() {
     const t = fundedSecurityType.getValue();
     secDetailRow.innerHTML = '';
+    if (!t) return;
     if (t === 'FDR' || t === 'Cash Security') {
       csRate.setLabel('Cash Security / FDR Rate');
       secDetailRow.append(csAmount, csRate);
@@ -199,12 +201,15 @@ function collectRegularInputs(f) {
 }
 
 function validateRegular(i) {
-  if (i.offeredRate === null) return fail('Enter Offered Rate.');
   if (!i.loanAmount) return fail('Enter Loan Amount.');
-  if (!i.loanTenor) return fail('Enter Loan Tenor.');
+  if (i.offeredRate === null) return fail('Enter Offered Rate.');
+  if (!i.moratoriumAvail) return fail('Select whether a moratorium is available.');
   if (i.moratoriumAvail === 'Yes' && !i.moratoriumPeriod) return fail('Enter Moratorium Period.');
+  if (!i.loanTenor) return fail('Enter Loan Tenor.');
   if (i.moratoriumAvail === 'Yes' && i.loanTenor <= i.moratoriumPeriod) return fail('Loan Tenor must exceed Moratorium Period.');
+  if (!i.paymentMode) return fail('Select a Payment Mode.');
   if (i.totalCof === null) return fail('Enter Total Cost of Fund.');
+  if (!i.fundedSecurityType) return fail('Select a Funded Security Type.');
   if (i.fundedSecurityType === 'FDR' || i.fundedSecurityType === 'Cash Security') {
     if (i.csRate === null) return fail('Enter Cash Security / FDR Rate.');
     if (i.csAmount === null) return fail('Enter Cash Security / FDR Amount.');
@@ -224,7 +229,7 @@ export function renderCustomizedLoan(root) {
 
   const loanAmount = numberField({ label: 'Loan Amount', name: 'loanAmount' });
   const offeredRate = percentField({ label: 'Offered Rate', name: 'offeredRate' });
-  const moratoriumAvail = optionField({ label: 'Moratorium Available?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No', onChange: refresh });
+  const moratoriumAvail = optionField({ label: 'Moratorium Available?', name: 'moratoriumAvail', options: [{ label: '— select —', value: '' }, 'No', 'Yes'], value: '', onChange: refresh });
   const moratoriumPeriod = numberField({ label: 'Moratorium Period (Months)', name: 'moratoriumPeriod', integerOnly: true, min: 1 });
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); paymentLayers.applyLayerRules(); });
   const idpField = monthBoxesField({
@@ -258,7 +263,7 @@ export function renderCustomizedLoan(root) {
     schema: [
       { key: 'fromInstallment', label: 'From Date', type: 'option', options: fromOptions, allowEmpty: true, placeholder: '', width: '0.8fr', readOnly: true },
       { key: 'toInstallment', label: 'To Date', type: 'option', options: toOptions, allowEmpty: true, placeholder: '— select —', width: '0.8fr' },
-      { key: 'paymentType', label: 'Payment Type', type: 'option', options: [
+      { key: 'paymentType', label: 'Payment Type', type: 'option', allowEmpty: true, placeholder: '— select —', options: [
           'Customized Principal', 'EMI', 'EQI',
           'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)',
         ], width: '1.2fr' },
@@ -297,7 +302,7 @@ export function renderCustomizedLoan(root) {
   setTwoLineLabel(totalCof, 'Total Cost of Fund', '(COF/ISC + OPEX)');
   const fundedSecurityType = optionField({
     label: 'Funded Security Type', name: 'fundedSecurityType',
-    options: ['FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: 'FDR', onChange: refresh,
+    options: [{ label: '— select —', value: '' }, 'FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: '', onChange: refresh,
   });
   setTwoLineLabel(fundedSecurityType, 'Funded Security', 'Type');
   const csAmount = numberField({ label: 'Cash Security / FDR Amount', name: 'csAmount' });
@@ -318,6 +323,7 @@ export function renderCustomizedLoan(root) {
   function rebuildSecurityRow() {
     const t = fundedSecurityType.getValue();
     secDetailRow.innerHTML = '';
+    if (!t) return;
     if (t === 'FDR' || t === 'Cash Security') {
       csRate.setLabel('Cash Security / FDR Rate');
       secDetailRow.append(csAmount, csRate);
@@ -422,6 +428,8 @@ function validateCustomized(i) {
   if (!i.loanAmount) return 'Enter Loan Amount.';
   if (!i.loanTenor) return 'Enter Loan Tenor.';
   if (i.totalCof === null) return 'Enter Total Cost of Fund.';
+  if (!i.fundedSecurityType) return 'Select a Funded Security Type.';
+  if (!i.moratoriumAvail) return 'Select whether a moratorium is available.';
   if (i.moratoriumAvail === 'Yes') {
     if (!i.moratoriumPeriod) return 'Enter Moratorium Period.';
     if (i.loanTenor <= i.moratoriumPeriod) return 'Loan Tenor must exceed Moratorium Period.';
@@ -483,7 +491,7 @@ export function renderRateRevisionStructured(root) {
     onChange: () => rerunLayerRules(),
   });
 
-  const moratoriumAvail = optionField({ label: 'Moratorium Given at Disbursement?', name: 'moratoriumAvail', options: ['No', 'Yes'], value: 'No', onChange: refresh });
+  const moratoriumAvail = optionField({ label: 'Moratorium Given at Disbursement?', name: 'moratoriumAvail', options: [{ label: '— select —', value: '' }, 'No', 'Yes'], value: '', onChange: refresh });
   const moratoriumPeriod = numberField({ label: 'Moratorium Period (Months)', name: 'moratoriumPeriod', integerOnly: true, min: 1 });
   moratoriumPeriod.input.addEventListener('input', refresh);
 
@@ -494,7 +502,7 @@ export function renderRateRevisionStructured(root) {
 
   const paymentModality = optionField({
     label: 'Payment Modality', name: 'paymentModality',
-    options: ['EMI', 'EQI', 'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)'], value: 'EMI',
+    options: [{ label: '— select —', value: '' }, 'EMI', 'EQI', 'Equal Principal + Interest (Monthly)', 'Equal Principal + Interest (Quarterly)'], value: '',
   });
   const tenorMonths = numberField({ label: 'Loan Tenor at Disbursement (Months)', name: 'tenorMonths', integerOnly: true, min: 1 });
 
@@ -605,6 +613,8 @@ export function renderRateRevisionStructured(root) {
     const dow = new Date(inputs.disbursementDate).getDay();
     if (dow === 5 || dow === 6) return toast('Disbursement Date cannot be Friday or Saturday.', 'error');
     if (!inputs.tenorMonths) return toast('Enter Loan Tenor.', 'error');
+    if (!inputs.moratoriumAvail) return toast('Select whether a moratorium is given at disbursement.', 'error');
+    if (!inputs.paymentModality) return toast('Select a Payment Modality.', 'error');
     if (!inputs.rateLayers.length) return toast('Add at least one Lending Rate Layer.', 'error');
 
     const mat = maturityISO();
