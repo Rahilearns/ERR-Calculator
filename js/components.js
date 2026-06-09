@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zp';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zq';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -269,7 +269,8 @@ export function formatDDMMMYYYY(d) {
 // Month boxes — selectable equal-width boxes (max 6/row). Optional "Select all" checkbox.
 export function monthBoxesField({ name, getCount, tooltip = '', label = '', selectAll = true, capitalizable = false }) {
   const wrapper = el('div', { class: 'field' });
-  let capitalize = null; // null = no mode chosen yet; false = paid; true = capitalized
+  let states = []; // per month: 0 = none (accrue), 1 = paid, 2 = capitalized
+  const maxState = capitalizable ? 2 : 1;
   if (label) {
     const head = el('div', { class: 'label-row' });
     const lbl = el('label', {}, label);
@@ -279,10 +280,11 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       const allLabel = el('label', { class: 'select-all-toggle' });
       const allCb = el('input', { type: 'checkbox' });
       allLabel.appendChild(allCb);
-      allLabel.appendChild(document.createTextNode(' Select all'));
+      allLabel.appendChild(document.createTextNode(' Select all (paid)'));
       head.appendChild(allLabel);
       allCb.addEventListener('change', () => {
-        states = states.map(() => allCb.checked);
+        const v = allCb.checked ? 1 : 0;
+        states = states.map(() => v);
         render();
       });
       wrapper._allCb = allCb;
@@ -292,80 +294,55 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   const grid = el('div', { class: 'month-boxes', 'data-name': name });
   wrapper.appendChild(grid);
 
-  let states = [];
+  // Explanatory note below the boxes (only when capitalization is offered).
+  if (capitalizable) {
+    wrapper.appendChild(el('div', { class: 'mora-note' },
+      'Click a month to set how its accrued-but-unpaid interest is treated — ',
+      el('b', { class: 'mn-paid' }, 'one click = Paid'),
+      ' at that month-end, ',
+      el('b', { class: 'mn-cap' }, 'two clicks = Capitalized'),
+      ' into principal at that month-end (it then earns interest); a third click clears it. ',
+      'Unmarked months keep accruing until the next Paid/Capitalized month, or the first installment after the moratorium.',
+    ));
+  }
+
   function syncAllCb() {
     if (!wrapper._allCb) return;
     const n = states.length;
-    wrapper._allCb.checked = n > 0 && states.every(Boolean);
-    wrapper._allCb.indeterminate = !wrapper._allCb.checked && states.some(Boolean);
+    wrapper._allCb.checked = n > 0 && states.every(s => s > 0);
+    wrapper._allCb.indeterminate = !wrapper._allCb.checked && states.some(s => s > 0);
   }
+  const CLS = { 1: 'paid', 2: 'capitalized' };
   function render() {
     const n = Math.max(0, getCount() || 0);
-    states = Array.from({ length: n }, (_, i) => states[i] ?? false);
-    // When capitalizing, the final moratorium month always capitalizes (locked on).
-    if (capitalize && n > 0) states[n - 1] = true;
+    states = Array.from({ length: n }, (_, i) => Math.min(Number(states[i]) || 0, maxState));
     grid.innerHTML = '';
     for (let i = 0; i < n; i++) {
-      const lockedLast = capitalize && i === n - 1;
+      const cls = CLS[states[i]] || '';
       const box = el('div', {
-        class: 'month-box' + (states[i] ? ' selected' : '') + (lockedLast ? ' locked' : ''),
+        class: 'month-box' + (cls ? ' ' + cls : ''),
         'data-month': i + 1,
       },
         el('div', { class: 'mb-num' }, String(i + 1).padStart(2, '0')),
         el('div', { class: 'mb-lbl' }, 'Month'),
       );
-      if (!lockedLast) {
-        box.addEventListener('click', () => {
-          states[i] = !states[i];
-          box.classList.toggle('selected', states[i]);
-          syncAllCb();
-        });
-      }
+      box.addEventListener('click', () => {
+        states[i] = (states[i] + 1) % (maxState + 1);
+        render();
+      });
       grid.appendChild(box);
     }
     syncAllCb();
   }
-  // Mode selector under the month boxes: "Interest will be paid" vs "Interest will be
-  // capitalized" (mutually exclusive). Defaults to "paid" — the legacy behaviour — so a
-  // new user always sees, explicitly, how the ticked months are treated.
-  if (capitalizable) {
-    const groupName = 'moraMode_' + nextId();
-    const paidLabel = el('label', { class: 'mora-mode-opt' });
-    const paidRadio = el('input', { type: 'radio', name: groupName });
-    paidLabel.appendChild(paidRadio);
-    paidLabel.appendChild(document.createTextNode(' Interest will be paid'));
-    const capLabel = el('label', { class: 'mora-mode-opt' });
-    const capRadio = el('input', { type: 'radio', name: groupName });
-    capLabel.appendChild(capRadio);
-    capLabel.appendChild(document.createTextNode(' Interest will be capitalized'));
-    const info = infoIcon(
-      'Choose how interest during the moratorium is handled.\n\n' +
-      '• Interest will be paid: the ticked months are the months the borrower actually pays ' +
-      'interest. Interest for unticked months accrues and is collected at the next ticked ' +
-      '(paid) month, or added to the first installment after the moratorium.\n\n' +
-      '• Interest will be capitalized: no interest is paid during the moratorium. Accrued ' +
-      'interest is added to the principal (capitalized) at each ticked month and always at the ' +
-      'end of the moratorium; interest then accrues on the larger principal.'
-    );
-    wrapper.appendChild(el('div', { class: 'mora-mode' }, paidLabel, capLabel, info));
-    paidRadio.checked = capitalize === false;
-    capRadio.checked = capitalize === true;
-    paidRadio.addEventListener('change', () => { if (paidRadio.checked) { capitalize = false; render(); } });
-    capRadio.addEventListener('change', () => { if (capRadio.checked) { capitalize = true; render(); } });
-    wrapper._paidRadio = paidRadio;
-    wrapper._capRadio = capRadio;
-  }
 
   wrapper.refresh = render;
   wrapper.getValue = () => states.slice();
-  wrapper.setValue = (arr) => { states = (arr || []).slice(); render(); };
-  wrapper.getCapitalize = () => capitalize;
-  wrapper.setCapitalize = (v) => {
-    capitalize = (v === true || v === false) ? v : null;
-    if (wrapper._capRadio) wrapper._capRadio.checked = capitalize === true;
-    if (wrapper._paidRadio) wrapper._paidRadio.checked = capitalize === false;
+  wrapper.setValue = (arr) => {
+    states = (arr || []).map(v => v === true ? 1 : v === false ? 0 : Math.min(Number(v) || 0, maxState));
     render();
   };
+  wrapper.getPaidFlags = () => states.map(s => s === 1);
+  wrapper.getCapFlags = () => states.map(s => s === 2);
   render();
   return wrapper;
 }

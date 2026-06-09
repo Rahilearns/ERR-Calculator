@@ -77,7 +77,7 @@ export function buildStructuredSchedule(p) {
     paymentMode,
     moratoriumMonths = 0,
     idpFlags = [],
-    capitalizeInterest = false,
+    capFlags = [],
     cofRate = 0,
   } = p;
 
@@ -99,24 +99,18 @@ export function buildStructuredSchedule(p) {
   for (let m = 1; m <= moratoriumMonths; m++) {
     const interest = urpa * monthlyRate;
     let installment = 0;
-    if (capitalizeInterest) {
-      // Interest is not paid in cash; it accrues and is capitalized (folded into
-      // principal) at each ticked month and always at the final moratorium month.
-      // Subsequent interest then accrues on the larger principal (compounding).
-      accruedReceivable += interest;
-      if (!!idpFlags[m - 1] || m === moratoriumMonths) {
-        urpa += accruedReceivable;
-        accruedReceivable = 0;
-      }
-    } else {
-      const paid = !!idpFlags[m - 1];
-      if (paid) {
-        installment = interest + accruedReceivable;
-        accruedReceivable = 0;
-      } else {
-        accruedReceivable += interest;
-      }
+    accruedReceivable += interest;
+    if (capFlags[m - 1]) {
+      // Capitalized: fold accrued-but-unpaid interest into principal at this month-end;
+      // interest then accrues on the larger (compounding) principal.
+      urpa += accruedReceivable;
+      accruedReceivable = 0;
+    } else if (idpFlags[m - 1]) {
+      // Paid: settle the accrued-but-unpaid interest in cash this month.
+      installment = accruedReceivable;
+      accruedReceivable = 0;
     }
+    // else: keep accruing into the next Paid/Capitalized month or first post-moratorium installment
     rows.push({
       sl: m, installment, interest, principal: 0, urpa,
       interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
@@ -209,7 +203,7 @@ export function buildCustomizedSchedule(p) {
     loanAmount, ratePerYear, tenorMonths,
     moratoriumMonths = 0,
     idpFlags = [],
-    capitalizeInterest = false,
+    capFlags = [],
     cofRate = 0,
     layers,
   } = p;
@@ -225,23 +219,18 @@ export function buildCustomizedSchedule(p) {
   for (let m = 1; m <= moratoriumMonths; m++) {
     const interest = urpa * monthlyRate;
     let installment = 0;
-    if (capitalizeInterest) {
-      // Capitalize accrued interest into principal at each ticked month and at the
-      // final moratorium month; later interest accrues on the larger principal.
-      accruedReceivable += interest;
-      if (!!idpFlags[m - 1] || m === moratoriumMonths) {
-        urpa += accruedReceivable;
-        accruedReceivable = 0;
-      }
-    } else {
-      const paid = !!idpFlags[m - 1];
-      if (paid) {
-        installment = interest + accruedReceivable;
-        accruedReceivable = 0;
-      } else {
-        accruedReceivable += interest;
-      }
+    accruedReceivable += interest;
+    if (capFlags[m - 1]) {
+      // Capitalized: fold accrued-but-unpaid interest into principal at this month-end;
+      // interest then accrues on the larger (compounding) principal.
+      urpa += accruedReceivable;
+      accruedReceivable = 0;
+    } else if (idpFlags[m - 1]) {
+      // Paid: settle the accrued-but-unpaid interest in cash this month.
+      installment = accruedReceivable;
+      accruedReceivable = 0;
     }
+    // else: keep accruing into the next Paid/Capitalized month or first post-moratorium installment
     rows.push({
       sl: m, installment, interest, principal: 0, urpa,
       interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
@@ -460,7 +449,7 @@ export function buildRateRevisionStructured(p) {
     disbursementDate,
     moratoriumMonths = 0,
     idpFlags = [],
-    capitalizeInterest = false,
+    capFlags = [],
     paymentModality,
     tenorMonths,
     rateLayers,
@@ -550,22 +539,15 @@ export function buildRateRevisionStructured(p) {
     let installment = 0, interest = 0, principal = 0;
     if (m <= moratoriumMonths) {
       interest = urpa * monthlyRate;
-      if (capitalizeInterest) {
-        // Capitalize accrued interest into principal at each ticked month and at the
-        // final moratorium month; later interest accrues on the larger principal.
-        accruedReceivable += interest;
-        if (!!idpFlags[m - 1] || m === moratoriumMonths) {
-          urpa += accruedReceivable;
-          accruedReceivable = 0;
-        }
-      } else {
-        const paid = !!idpFlags[m - 1];
-        if (paid) {
-          installment = interest + accruedReceivable;
-          accruedReceivable = 0;
-        } else {
-          accruedReceivable += interest;
-        }
+      accruedReceivable += interest;
+      if (capFlags[m - 1]) {
+        // Capitalized: fold accrued-but-unpaid interest into principal at this month-end.
+        urpa += accruedReceivable;
+        accruedReceivable = 0;
+      } else if (idpFlags[m - 1]) {
+        // Paid: settle accrued-but-unpaid interest in cash this month.
+        installment = accruedReceivable;
+        accruedReceivable = 0;
       }
     } else {
       const monthsSinceMora = m - moratoriumMonths;

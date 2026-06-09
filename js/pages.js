@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zp';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zp';
+} from './components.js?v=20260603zq';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zq';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zp';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zp';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zp';
+} from './calculations.js?v=20260603zq';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zq';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zq';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zp';
+} from './excel.js?v=20260603zq';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -74,7 +74,7 @@ export function renderRegularLoan(root) {
 
   function securityOptions() {
     const pm = paymentMode.getValue();
-    const opts = ['FDR', 'Cash Security'];
+    const opts = ['No Funded Security', 'FDR', 'Cash Security'];
     if (pm === 'EMI') opts.push('EMI after Moratorium');
     else if (pm === 'EQI') opts.push('EQI after Moratorium');
     else if (pm) opts.push('Installment');
@@ -106,7 +106,7 @@ export function renderRegularLoan(root) {
   function rebuildSecurityRow() {
     const t = fundedSecurityType.getValue();
     secDetailRow.innerHTML = '';
-    if (!t) return;
+    if (!t || t === 'No Funded Security') return; // No Funded Security => no detail fields, security = 0
     if (t === 'FDR' || t === 'Cash Security') {
       csRate.setLabel('Cash Security / FDR Rate');
       secDetailRow.append(csAmount, csRate);
@@ -167,7 +167,7 @@ export function renderRegularLoan(root) {
       paymentMode: inputs.paymentMode,
       moratoriumMonths: moraMonths,
       idpFlags: inputs.idpFlags,
-      capitalizeInterest: inputs.capitalizeInterest,
+      capFlags: inputs.capFlags,
       cofRate: inputs.totalCof,
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
       // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
@@ -190,8 +190,8 @@ function collectRegularInputs(f) {
     loanAmount: f.loanAmount.getValue(),
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
-    idpFlags: f.idpField.getValue(),
-    capitalizeInterest: f.idpField.getCapitalize(),
+    idpFlags: f.idpField.getPaidFlags(),
+    capFlags: f.idpField.getCapFlags(),
     loanTenor: f.loanTenor.getValue(),
     paymentMode: f.paymentMode.getValue(),
     totalCof: f.totalCof.getValue(),
@@ -207,8 +207,6 @@ function validateRegular(i) {
   if (i.offeredRate === null) return fail('Enter Offered Rate.');
   if (!i.moratoriumAvail) return fail('Select whether a moratorium is available.');
   if (i.moratoriumAvail === 'Yes' && !i.moratoriumPeriod) return fail('Enter Moratorium Period.');
-  if (i.moratoriumAvail === 'Yes' && i.moratoriumPeriod && i.capitalizeInterest == null)
-    return fail('Select whether moratorium interest is paid or capitalized.');
   if (!i.loanTenor) return fail('Enter Loan Tenor.');
   if (i.moratoriumAvail === 'Yes' && i.loanTenor <= i.moratoriumPeriod) return fail('Loan Tenor must exceed Moratorium Period.');
   if (!i.paymentMode) return fail('Select a Payment Mode.');
@@ -218,7 +216,7 @@ function validateRegular(i) {
     if (i.csRate === null) return fail('Enter Cash Security / FDR Rate.');
     if (i.csAmount === null) return fail('Enter Cash Security / FDR Amount.');
   }
-  if (!(i.fundedSecurityType === 'FDR' || i.fundedSecurityType === 'Cash Security') && !i.numInst)
+  if (['EMI after Moratorium', 'EQI after Moratorium', 'Installment'].includes(i.fundedSecurityType) && !i.numInst)
     return fail('Enter Number of Installments.');
   return true;
 }
@@ -306,7 +304,7 @@ export function renderCustomizedLoan(root) {
   setTwoLineLabel(totalCof, 'Total Cost of Fund', '(COF/ISC + OPEX)');
   const fundedSecurityType = optionField({
     label: 'Funded Security Type', name: 'fundedSecurityType',
-    options: [{ label: '— select —', value: '' }, 'FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: '', onChange: refresh,
+    options: [{ label: '— select —', value: '' }, 'No Funded Security', 'FDR', 'Cash Security', 'EMI after Moratorium', 'EQI after Moratorium'], value: '', onChange: refresh,
   });
   setTwoLineLabel(fundedSecurityType, 'Funded Security', 'Type');
   const csAmount = numberField({ label: 'Cash Security / FDR Amount', name: 'csAmount' });
@@ -327,7 +325,7 @@ export function renderCustomizedLoan(root) {
   function rebuildSecurityRow() {
     const t = fundedSecurityType.getValue();
     secDetailRow.innerHTML = '';
-    if (!t) return;
+    if (!t || t === 'No Funded Security') return; // No Funded Security => no detail fields, security = 0
     if (t === 'FDR' || t === 'Cash Security') {
       csRate.setLabel('Cash Security / FDR Rate');
       secDetailRow.append(csAmount, csRate);
@@ -384,7 +382,7 @@ export function renderCustomizedLoan(root) {
       tenorMonths: inputs.loanTenor,
       moratoriumMonths: mora,
       idpFlags: inputs.idpFlags,
-      capitalizeInterest: inputs.capitalizeInterest,
+      capFlags: inputs.capFlags,
       cofRate: inputs.totalCof,
       layers: inputs.paymentLayers,
     };
@@ -411,8 +409,8 @@ function collectCustomizedInputs(f) {
     loanAmount: f.loanAmount.getValue(),
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
-    idpFlags: f.idpField.getValue(),
-    capitalizeInterest: f.idpField.getCapitalize(),
+    idpFlags: f.idpField.getPaidFlags(),
+    capFlags: f.idpField.getCapFlags(),
     loanTenor: tenor,
     paymentLayers: f.paymentLayers.getValue().map(r => ({
       fromInstallment: r.fromInstallment ? Number(r.fromInstallment) : null,
@@ -439,7 +437,6 @@ function validateCustomized(i) {
   if (i.moratoriumAvail === 'Yes') {
     if (!i.moratoriumPeriod) return 'Enter Moratorium Period.';
     if (i.loanTenor <= i.moratoriumPeriod) return 'Loan Tenor must exceed Moratorium Period.';
-    if (i.capitalizeInterest == null) return 'Select whether moratorium interest is paid or capitalized.';
   }
   if (!i.paymentLayers.length) return 'Add at least one Payment Layer.';
   // Layer count cap
@@ -621,8 +618,6 @@ export function renderRateRevisionStructured(root) {
     if (dow === 5 || dow === 6) return toast('Disbursement Date cannot be Friday or Saturday.', 'error');
     if (!inputs.tenorMonths) return toast('Enter Loan Tenor.', 'error');
     if (!inputs.moratoriumAvail) return toast('Select whether a moratorium is given at disbursement.', 'error');
-    if (inputs.moratoriumAvail === 'Yes' && inputs.moratoriumPeriod && inputs.capitalizeInterest == null)
-      return toast('Select whether moratorium interest is paid or capitalized.', 'error');
     if (!inputs.paymentModality) return toast('Select a Payment Modality.', 'error');
     if (!inputs.rateLayers.length) return toast('Add at least one Lending Rate Layer.', 'error');
 
@@ -644,7 +639,7 @@ export function renderRateRevisionStructured(root) {
       disbursementDate: inputs.disbursementDate,
       moratoriumMonths: mora,
       idpFlags: inputs.idpFlags,
-      capitalizeInterest: inputs.capitalizeInterest,
+      capFlags: inputs.capFlags,
       paymentModality: inputs.paymentModality,
       tenorMonths: inputs.tenorMonths,
       rateLayers: inputs.rateLayers,
@@ -668,8 +663,8 @@ function collectRevisionStructuredInputs(f) {
     disbursementDate: f.disbursementDate.getValue(),
     moratoriumAvail: f.moratoriumAvail.getValue(),
     moratoriumPeriod: f.moratoriumPeriod.getValue() || 0,
-    idpFlags: f.idpField.getValue(),
-    capitalizeInterest: f.idpField.getCapitalize(),
+    idpFlags: f.idpField.getPaidFlags(),
+    capFlags: f.idpField.getCapFlags(),
     paymentModality: f.paymentModality.getValue(),
     tenorMonths: f.tenorMonths.getValue(),
     rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.activeRate !== null),
@@ -979,8 +974,11 @@ function restoreDraft(tabKey, fields) {
     if (fields.disbursementDate && data.disbursementDate) fields.disbursementDate.setValue(data.disbursementDate);
     if (fields.moratoriumAvail && data.moratoriumAvail) fields.moratoriumAvail.setValue(data.moratoriumAvail);
     if (fields.moratoriumPeriod && data.moratoriumPeriod) fields.moratoriumPeriod.setValue(data.moratoriumPeriod);
-    if (fields.idpField && Array.isArray(data.idpFlags)) fields.idpField.setValue(data.idpFlags);
-    if (fields.idpField && data.capitalizeInterest !== undefined) fields.idpField.setCapitalize(data.capitalizeInterest);
+    if (fields.idpField && (Array.isArray(data.idpFlags) || Array.isArray(data.capFlags))) {
+      const idp = data.idpFlags || [], cap = data.capFlags || [];
+      const n = Math.max(idp.length, cap.length);
+      fields.idpField.setValue(Array.from({ length: n }, (_, i) => cap[i] ? 2 : (idp[i] ? 1 : 0)));
+    }
     if (fields.loanTenor && data.loanTenor) fields.loanTenor.setValue(data.loanTenor);
     if (fields.tenorMonths && data.tenorMonths) fields.tenorMonths.setValue(data.tenorMonths);
     if (fields.paymentMode && data.paymentMode) fields.paymentMode.setValue(data.paymentMode);

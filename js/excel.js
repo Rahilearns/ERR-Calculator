@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zp';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zq';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -201,7 +201,7 @@ export function downloadVerificationExcel(filename, ctx) {
   // When moratorium interest is capitalized, the outstanding grows during the moratorium.
   // For those rows (and the EPI-principal / funded-security cells that depend on the grown
   // principal) the verify sheet uses the exact engine value so it matches the app.
-  const capitalize = !!params.capitalizeInterest;
+  const capitalize = (params.capFlags || []).some(Boolean);
 
   // ----- Schedule sheet (built first so we know row counts)
   // Each row uses cell-referenced formulas where possible so users can trace every calculation.
@@ -512,7 +512,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const rows = schedule.rows;
   const tenor = params.tenorMonths || (rows.length - 1);
   const mora = params.moratoriumMonths || 0;
-  const capitalize = !!params.capitalizeInterest;
+  const capitalize = (params.capFlags || []).some(Boolean);
   const pct = (v) => `${+(Number(v) * 100).toFixed(6)}%`; // inline percent literal, e.g. 0.14 -> "14%"
 
   // ----- Schedule sheet -----

@@ -511,10 +511,19 @@ select.centered-input { text-align: center; text-align-last: center; }
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .month-box:hover { border-color: var(--primary); }
-.month-box.selected { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+/* One click = Paid (light blue, dark-blue font) */
+.month-box.paid { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+/* Two clicks = Capitalized (deep purple, white font) */
+.month-box.capitalized { border-color: #5b21b6; background: #5b21b6; color: #fff; }
 .month-box .mb-num { font-weight: 700; font-size: 14px; }
 .month-box .mb-lbl { font-size: 10px; color: var(--text-soft); letter-spacing: 0.2px; }
-.month-box.selected .mb-lbl { color: var(--primary); }
+.month-box.paid .mb-lbl { color: var(--primary); }
+.month-box.capitalized .mb-num, .month-box.capitalized .mb-lbl { color: #fff; }
+
+/* Note under the moratorium month boxes explaining the click states */
+.mora-note { margin-top: 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-soft); }
+.mora-note .mn-paid { color: var(--primary); font-weight: 600; }
+.mora-note .mn-cap { color: #7c3aed; font-weight: 600; }
 
 /* Info icon — click toggles a popover (no hover behavior) */
 .info-icon {
