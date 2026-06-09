@@ -2,21 +2,21 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zn';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zn';
+} from './components.js?v=20260603zo';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zo';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zn';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zn';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zn';
+} from './calculations.js?v=20260603zo';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zo';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zo';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zn';
+} from './excel.js?v=20260603zo';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -114,7 +114,9 @@ export function renderRegularLoan(root) {
       csRate.setLabel('Funded Security Rate');
       secDetailRow.append(numInst, csRate);
     } else {
-      secDetailRow.append(numInst);
+      // "Installment" funded security (Equal-Principal loans): Number of Installments + its rate
+      csRate.setLabel('Funded Security Rate');
+      secDetailRow.append(numInst, csRate);
     }
   }
 
@@ -169,7 +171,7 @@ export function renderRegularLoan(root) {
       cofRate: inputs.totalCof,
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
       // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
-      securityRate: inputs.fundedSecurityType === 'Installment' ? 0 : (inputs.csRate || 0),
+      securityRate: inputs.csRate || 0,
       securityKind: inputs.fundedSecurityType,
       numInst: inputs.numInst,
     };
@@ -333,7 +335,9 @@ export function renderCustomizedLoan(root) {
       csRate.setLabel('Funded Security Rate');
       secDetailRow.append(numInst, csRate);
     } else {
-      secDetailRow.append(numInst);
+      // "Installment" funded security (Equal-Principal loans): Number of Installments + its rate
+      csRate.setLabel('Funded Security Rate');
+      secDetailRow.append(numInst, csRate);
     }
   }
 
@@ -389,7 +393,7 @@ export function renderCustomizedLoan(root) {
       ...params, paymentMode: 'EMI',
       securityAmount: isCs ? (inputs.csAmount || 0) : 0,
       // FDR/Cash use their rate; EMI/EQI after Moratorium use the Funded Security Rate; Installment has none.
-      securityRate: inputs.fundedSecurityType === 'Installment' ? 0 : (inputs.csRate || 0),
+      securityRate: inputs.csRate || 0,
       securityKind: inputs.fundedSecurityType,
       numInst: inputs.numInst,
     });
