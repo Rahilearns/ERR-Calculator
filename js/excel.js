@@ -1,10 +1,26 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zo';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zp';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
   if (v === null || v === undefined || isNaN(v)) return 0;
   return Math.round(Number(v) * 100) / 100;
+}
+
+// Full-precision numeric (no 2dp rounding) — used for COF rates so 11.01% / 10.99% survive
+// instead of all collapsing to 11.00%.
+function numHi(v) {
+  if (v === null || v === undefined || isNaN(v)) return 0;
+  return Math.round(Number(v) * 1e8) / 1e8;
+}
+
+// Format an ISO date (YYYY-MM-DD) as DD-Mmm-YYYY without timezone drift.
+function fmtDateDMY(iso) {
+  const parts = String(iso || '').split('-');
+  if (parts.length < 3) return String(iso || '');
+  const [y, m, d] = parts.map(Number);
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1] || '';
+  return `${String(d).padStart(2, '0')}-${mon}-${y}`;
 }
 
 export function downloadScheduleAsExcel(filename, schedule, meta = {}) {
@@ -402,7 +418,7 @@ export function downloadVerificationExcel(filename, ctx) {
   const resultRows = [
     { key: 'totalIntReceived', label: 'Total Interest Received', f: `Schedule!C${totalRowExcel}`,         z: FMT.ACCOUNTING },
     { key: 'totalIntExpense',  label: 'Total Interest Expense',  f: `Schedule!F${totalRowExcel}`,         z: FMT.ACCOUNTING },
-    { key: 'csBenefit',        label: 'CS Benefit',              f: csBenefitF,                            z: FMT.ACCOUNTING },
+    { key: 'csBenefit',        label: 'Loan Security Benefit',   f: csBenefitF,                            z: FMT.ACCOUNTING },
     { key: 'netII',            label: 'Net Interest Income',     f: (ref) => `B${ref.totalIntReceived}+B${ref.csBenefit}-B${ref.totalIntExpense}`, z: FMT.ACCOUNTING },
     // Avg Portfolio averages the START-of-month balances (sl 0 .. N-1), EXCLUDING the final
     // row whose URPA is 0 after the last payment. Matches computeMetrics (rows.slice(0,-1))
@@ -501,7 +517,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
 
   // ----- Schedule sheet -----
   const heads = ['Sl.', 'Date', 'Installment', 'Interest', 'Principal', 'URPA',
-                 'Total COF', 'Int. Expense (URPA*COF/12)', 'Accrued Interest', 'CS Balance', 'CS Benefit'];
+                 'Total COF', 'Int. Expense (URPA*COF/12)', 'Accrued Interest', 'Loan Security Balance', 'Loan Security Benefit'];
   const ws = {};
   heads.forEach((h, c) => setCell(ws, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
 
@@ -540,12 +556,12 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     if (i === 0) {
       ['C', 'D', 'E'].forEach(c => setCell(ws, `${c}${xr}`, 0, { z: FMT.ACCOUNTING }));
       setCell(ws, `F${xr}`, 0, { f: `'Inputs & Results'!B5`, z: FMT.ACCOUNTING });
-      setCell(ws, `G${xr}`, num(r.cof), { z: FMT.PCT2 });
+      setCell(ws, `G${xr}`, numHi(r.cof), { z: FMT.PCT2 });
       setCell(ws, `H${xr}`, 0, { z: FMT.ACCOUNTING });
       setCell(ws, `I${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
       setCell(ws, `J${xr}`, num(r.securityAmount || 0), { z: FMT.ACCOUNTING });
-      // CS benefit for disbursement row uses current row's COF + security rate
-      setCell(ws, `K${xr}`, 0, { f: `J${xr}*(G${xr}-${pct(r.securityRate || 0)})/12`, z: FMT.ACCOUNTING });
+      // Loan Security Benefit starts one row later (one-month lag); disbursement row carries none.
+      setCell(ws, `K${xr}`, 0, { z: FMT.ACCOUNTING });
       return;
     }
 
@@ -603,13 +619,14 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       setCell(ws, `F${xr}`, 0, { f: `F${pr}-E${xr}`, z: FMT.ACCOUNTING });
     }
     // G Total COF (value), H Int Expense = URPA_prev * COF / 12
-    setCell(ws, `G${xr}`, num(r.cof), { z: FMT.PCT2 });
+    setCell(ws, `G${xr}`, numHi(r.cof), { z: FMT.PCT2 });
     setCell(ws, `H${xr}`, 0, { f: `F${pr}*G${xr}/12`, z: FMT.ACCOUNTING });
     // I Accrued
     setCell(ws, `I${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
-    // J CS Balance, K CS Benefit = balance*(COF - secRate)/12
+    // J Loan Security Balance; K Loan Security Benefit = PRIOR row balance*(COF - secRate)/12 (one-month lag)
     setCell(ws, `J${xr}`, num(r.securityAmount || 0), { z: FMT.ACCOUNTING });
-    setCell(ws, `K${xr}`, 0, { f: `J${xr}*(G${xr}-${pct(r.securityRate || 0)})/12`, z: FMT.ACCOUNTING });
+    const prevSecRate = i > 0 ? (rows[i - 1].securityRate || 0) : 0;
+    setCell(ws, `K${xr}`, 0, { f: `J${pr}*(G${pr}-${pct(prevSecRate)})/12`, z: FMT.ACCOUNTING });
   });
 
   const lastDataRow = rows.length + 1;        // 1-indexed
@@ -652,7 +669,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const rRows = [
     ['Total Interest Received', `Schedule!D${totalRow}`, FMT.ACCOUNTING],
     ['Total Interest Expense', `Schedule!H${totalRow}`, FMT.ACCOUNTING],
-    ['CS Benefit', `Schedule!K${totalRow}`, FMT.ACCOUNTING],
+    ['Loan Security Benefit', `Schedule!K${totalRow}`, FMT.ACCOUNTING],
     ['Net Interest Income', (ref) => `B${ref.tir}+B${ref.csb}-B${ref.tie}`, FMT.ACCOUNTING],
     ['Avg Portfolio', `AVERAGE(Schedule!F2:F${lastDataRow - 1})`, FMT.ACCOUNTING],
     ['NIM', (ref) => `IF(B${ref.avg}*(${TENOR_CELL}/12)=0,0,B${ref.nii}/B${ref.avg}/(${TENOR_CELL}/12))`, FMT.PCT4],
@@ -681,7 +698,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     const firstSl = (y - 1) * 12 + 1;
     const lastSl = Math.min(y * 12, rows.length - 1);
     const dFrom = firstSl + 2, dTo = lastSl + 2;             // interest/expense rows (sl)
-    const kFrom = firstSl + 1, kTo = lastSl + 1;             // CS benefit offset up by one (sl0..)
+    const kFrom = firstSl + 2, kTo = lastSl + 2;             // Loan Security Benefit (lagged: Sl s -> row K(s+2))
     const fFrom = firstSl + 1, fTo = lastSl + 1;             // URPA start-of-month
     setCell(wsI, `A${yr}`, `Year ${String(y).padStart(2, '0')}`, { text: true, s: STYLE.cellCenter });
     setCell(wsI, `B${yr}`, 0, { f: `SUM(Schedule!D${dFrom}:D${dTo})`, z: FMT.ACCOUNTING });
@@ -749,15 +766,22 @@ function collectInputLinesFor(pageType, inp) {
     ];
   }
   if (pageType === 'revisionStructured') {
+    const moraYes = inp.moratoriumAvail === 'Yes' || inp.moratoriumAvail === true;
+    const rateLayersStr = (inp.rateLayers || []).length
+      ? inp.rateLayers.map(l => `${fmtP(l.activeRate || 0)} from ${fmtDateDMY(l.fromDate)}`).join(', ')
+      : '0 layer(s)';
+    const secLayersStr = (inp.securityLayers || []).length
+      ? inp.securityLayers.map(l => `Total ${fmtM(l.amount || 0)} from ${fmtDateDMY(l.fromDate)} at ${fmtP(l.activeRate || 0)}`).join(', ')
+      : '0 layer(s)';
     return [
       ['Initial Loan Amount', inp.initialAmount ?? 0],
       ['Disbursement Date', inp.disbursementDate ?? ''],
       ['Moratorium Given at Disbursement?', yesNo(inp.moratoriumAvail)],
       ['Moratorium Period (Months)', inp.moratoriumPeriod ?? 0],
-      ['Payment Modality', inp.paymentModality ?? ''],
+      [moraYes ? 'Payment Modality after Moratorium Period' : 'Payment Modality', inp.paymentModality ?? ''],
       ['Loan Tenor including Moratorium at Disbursement (Months)', inp.tenorMonths ?? 0],
-      ['Lending Rate Layers', (inp.rateLayers || []).length + ' layer(s)'],
-      ['Loan Security Layers', (inp.securityLayers || []).length + ' layer(s)'],
+      ['Lending Rate Layers', rateLayersStr],
+      ['Loan Security Layers', secLayersStr],
       ['Cost of Fund Layers', (inp.cofRecordCount || 0) + ' record(s)'],
     ];
   }

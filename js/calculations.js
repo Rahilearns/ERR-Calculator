@@ -471,7 +471,18 @@ export function buildRateRevisionStructured(p) {
   const ppy = periodsPerYear(paymentModality);
   const start = new Date(disbursementDate);
 
-  function addMonths(d, m) { const x = new Date(d); x.setMonth(x.getMonth() + m); return x; }
+  // Add months, clamping the day to the target month's last day (e.g. the 29th in a non-leap
+  // February becomes the 28th) instead of rolling over into the next month. This keeps each
+  // payment in its intended month, so date-keyed COF lookups use the correct month.
+  function addMonths(d, m) {
+    const x = new Date(d);
+    const day = x.getDate();
+    x.setDate(1);
+    x.setMonth(x.getMonth() + m);
+    const lastDay = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+    x.setDate(Math.min(day, lastDay));
+    return x;
+  }
   function fmt(d) { return d.toISOString().slice(0, 10); }
 
   // Lending rate effective on a date = the LAST layer whose fromDate <= date (extends the last
@@ -527,11 +538,12 @@ export function buildRateRevisionStructured(p) {
 
   for (let m = 1; m <= tenorMonths; m++) {
     const d = fmt(addMonths(start, m));
-    // Rate/COF apply on a one-month lag: the value effective at the START of the accrual
-    // month (the previous row's date), matching the rectified files.
+    // Lending rate applies on a one-month lag (value effective at the START of the accrual
+    // month = the previous row's date). COF is keyed to the row's OWN month (this row's date),
+    // so interest expense H(N) = URPA(N-1) * COF(N) / 12 — matching the rectified files.
     const accrualStart = fmt(addMonths(start, m - 1));
     const ratePm = getRateOn(accrualStart);
-    const cofPm = getCofOn(accrualStart);
+    const cofPm = getCofOn(d);
     const sec = getSecurityOn(d); // security uses the current month's date
     const monthlyRate = ratePm / 12;
 
@@ -596,6 +608,9 @@ export function buildRateRevisionStructured(p) {
     });
   }
 
+  // Loan Security Balance is released at maturity: show 0 on the final payment row.
+  if (rows.length > 1) rows[rows.length - 1].securityAmount = 0;
+
   applyIntExpenseAccrual(rows, 0, (i) => (rows[i].cof || 0) / 12);
   return { rows };
 }
@@ -629,9 +644,14 @@ export function computeRevisionMetrics(schedule) {
   const totalMonths = rows.length - 1;
   const tenorYears = totalMonths / 12;
 
-  // CS Benefit per month = securityBalance * (COF - securityRate) / 12, summed over every row
-  // (0 where no security layer covers, since securityAmount = 0 there).
-  const csBenefit = rows.reduce((s, r) => s + ((r.cof || 0) - (r.securityRate || 0)) * (r.securityAmount || 0) / 12, 0);
+  // Loan Security Benefit accrues on the prior month's balance: the benefit realized at row N
+  // uses row (N-1)'s security balance and COF (one-month lag, like interest expense). The
+  // disbursement row carries none; the final row's released balance naturally drops out.
+  let csBenefit = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const p = rows[i - 1];
+    csBenefit += ((p.cof || 0) - (p.securityRate || 0)) * (p.securityAmount || 0) / 12;
+  }
   const nii = totalInterest + csBenefit - totalInterestExpense;
   const nim = avgPortfolio > 0 && tenorYears > 0 ? (nii / avgPortfolio) / tenorYears : 0;
   // Effective COF = total interest expense / avg portfolio / tenor years; ERR = NIM + effective COF.
