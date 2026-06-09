@@ -443,6 +443,23 @@ export function computeMetrics(schedule, params) {
 // ============================================================
 // Rate Revision — Structured
 // ============================================================
+
+// Add months to a date keeping the loan's due day-of-month, per the banking convention:
+// a due day of 28/29/30/31 falls on February's LAST day (28 non-leap, 29 leap) whenever
+// February occurs in the schedule, and a 31st due day falls on the 30th in 30-day months.
+// Always computed from the original anchor date, so the due day never drifts (after a
+// 28-Feb due the schedule returns to the 29th/30th/31st in March).
+export function addMonthsDue(d, m) {
+  const x = new Date(d);
+  const day = x.getDate();
+  x.setDate(1);
+  x.setMonth(x.getMonth() + m);
+  const lastDay = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  const isFeb = x.getMonth() === 1;
+  x.setDate(isFeb && day >= 28 ? lastDay : Math.min(day, lastDay));
+  return x;
+}
+
 export function buildRateRevisionStructured(p) {
   const {
     initialLoanAmount,
@@ -460,18 +477,7 @@ export function buildRateRevisionStructured(p) {
   const ppy = periodsPerYear(paymentModality);
   const start = new Date(disbursementDate);
 
-  // Add months, clamping the day to the target month's last day (e.g. the 29th in a non-leap
-  // February becomes the 28th) instead of rolling over into the next month. This keeps each
-  // payment in its intended month, so date-keyed COF lookups use the correct month.
-  function addMonths(d, m) {
-    const x = new Date(d);
-    const day = x.getDate();
-    x.setDate(1);
-    x.setMonth(x.getMonth() + m);
-    const lastDay = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
-    x.setDate(Math.min(day, lastDay));
-    return x;
-  }
+  const addMonths = addMonthsDue;
   function fmt(d) { return d.toISOString().slice(0, 10); }
 
   // Lending rate effective on a date = the LAST layer whose fromDate <= date (extends the last

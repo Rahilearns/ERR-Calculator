@@ -2,21 +2,22 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zq';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zq';
+} from './components.js?v=20260603zr';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zr';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
-} from './calculations.js?v=20260603zq';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zq';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zq';
+  addMonthsDue,
+} from './calculations.js?v=20260603zr';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zr';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zr';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zq';
+} from './excel.js?v=20260603zr';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -517,8 +518,9 @@ export function renderRateRevisionStructured(root) {
     const d = disbursementDate.getValue();
     const t = tenorMonths.getValue();
     if (!d || !t) return null;
-    const dt = new Date(d);
-    dt.setMonth(dt.getMonth() + t);
+    // Month-t due date per the due-day convention (Feb -> last day for 28th-31st
+    // anchors; no rollover into March), then one day back.
+    const dt = addMonthsDue(d, t);
     dt.setDate(dt.getDate() - 1);
     return dt.toISOString().slice(0, 10);
   }
