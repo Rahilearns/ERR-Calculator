@@ -83,7 +83,12 @@ export function buildStructuredSchedule(p) {
 
   const ppy = periodsPerYear(paymentMode);
   const regularTenor = tenorMonths - moratoriumMonths;
-  const regularPeriods = (ppy === 12) ? regularTenor : Math.round(regularTenor / 3);
+  // Payments required to COVER the regular period: a partial final quarter still needs a
+  // payment, so quarterly uses ceil. When the tenor doesn't divide evenly the installment
+  // is sized over the phantom final quarter and the leftover principal is settled on the
+  // maturity month (1-2 month stub) with the interest accrued on it — same rule as RRS.
+  const regularPeriods = (ppy === 12) ? regularTenor : Math.ceil(regularTenor / 3);
+  const stubMonths = (ppy === 12) ? 0 : regularTenor % 3;
 
   const ratePerPeriod = ratePerYear / ppy;
   const monthlyRate = ratePerYear / 12;
@@ -133,7 +138,7 @@ export function buildStructuredSchedule(p) {
     baseInstallment = pmt;
     let paymentCounter = 0;
     for (let m = moratoriumMonths + 1; m <= tenorMonths; m++) {
-      let installment = 0, interest = 0, principal = 0;
+      let installment = 0, interest = 0, principal = 0, stubOut;
       const monthsSinceMora = m - moratoriumMonths;
       const isPaymentMonth = (ppy === 12) || (monthsSinceMora % 3 === 0);
       if (isPaymentMonth) {
@@ -152,11 +157,20 @@ export function buildStructuredSchedule(p) {
         }
         urpa = Math.max(0, urpa - principal);
         paymentCounter++;
+      } else if (stubMonths > 0 && m === tenorMonths) {
+        // Maturity stub: pay the leftover principal + the interest accrued on it since the
+        // last quarterly due date (+ any still-uncollected moratorium accrued).
+        interest = urpa * monthlyRate * stubMonths;
+        principal = urpa;
+        installment = principal + interest + accruedReceivable;
+        accruedReceivable = 0;
+        urpa = 0;
+        stubOut = stubMonths;
       }
       rows.push({
         sl: m, installment, interest, principal, urpa,
         interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
-        paymentType: paymentMode, isPaymentMonth,
+        paymentType: paymentMode, isPaymentMonth, stubMonths: stubOut,
       });
     }
   } else {
@@ -167,7 +181,7 @@ export function buildStructuredSchedule(p) {
     const firstInterest = urpa * ratePerPeriod;
     baseInstallment = principalPer + firstInterest;
     for (let m = moratoriumMonths + 1; m <= tenorMonths; m++) {
-      let installment = 0, interest = 0, principal = 0;
+      let installment = 0, interest = 0, principal = 0, stubOut;
       const monthsSinceMora = m - moratoriumMonths;
       const isPaymentMonth = (ppy === 12) || (monthsSinceMora % 3 === 0);
       if (isPaymentMonth) {
@@ -185,11 +199,20 @@ export function buildStructuredSchedule(p) {
         }
         urpa = Math.max(0, urpa - principal);
         paymentCounter++;
+      } else if (stubMonths > 0 && m === tenorMonths) {
+        // Maturity stub: pay the leftover principal + the interest accrued on it since the
+        // last quarterly due date (+ any still-uncollected moratorium accrued).
+        interest = urpa * monthlyRate * stubMonths;
+        principal = urpa;
+        installment = principal + interest + accruedReceivable;
+        accruedReceivable = 0;
+        urpa = 0;
+        stubOut = stubMonths;
       }
       rows.push({
         sl: m, installment, interest, principal, urpa,
         interestExpense: urpa * monthlyCof, idpReceivable: accruedReceivable,
-        paymentType: paymentMode, isPaymentMonth,
+        paymentType: paymentMode, isPaymentMonth, stubMonths: stubOut,
       });
     }
   }

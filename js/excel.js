@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zu';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zv';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -284,8 +284,12 @@ export function downloadVerificationExcel(filename, ctx) {
     const divisor = (isQuarterly && r.interest > 0) ? 4 : 12;
 
     // Interest (C) = URPA_prev * Rate / (12 or 4). Always a formula when a rate input exists.
+    // Maturity stub (quarterly grid short of maturity) accrues nominal months: Rate*(1 or 2)/12.
     if (RATE_REF && r.interest > 0) {
-      setCell(wsSched, `C${xr}`, 0, { f: `E${pr}*${RATE_REF}/${divisor}`, z: FMT.ACCOUNTING });
+      const intFormula = r.stubMonths
+        ? `E${pr}*${RATE_REF}${r.stubMonths === 2 ? '*2' : ''}/12`
+        : `E${pr}*${RATE_REF}/${divisor}`;
+      setCell(wsSched, `C${xr}`, 0, { f: intFormula, z: FMT.ACCOUNTING });
     } else {
       setCell(wsSched, `C${xr}`, num(r.interest), { z: FMT.ACCOUNTING });
     }
@@ -297,8 +301,9 @@ export function downloadVerificationExcel(filename, ctx) {
       setCell(wsSched, `D${xr}`, num(r.principal || 0), { z: FMT.ACCOUNTING });
     } else if (isEPI && epiCapable && !capitalize) {
       // Structured: one EPI stream over the whole regular tenor.
-      // Monthly: Loan / regularMonths ; Quarterly: Loan / (regularMonths/3)
-      const denom = isQuarterly ? `(${regularMonthsExpr}/3)` : regularMonthsExpr;
+      // Monthly: Loan / regularMonths ; Quarterly: Loan / ROUNDUP(regularMonths/3) — the
+      // cover-based payment count (a partial final quarter still needs a payment).
+      const denom = isQuarterly ? `ROUNDUP(${regularMonthsExpr}/3,0)` : regularMonthsExpr;
       setCell(wsSched, `D${xr}`, 0, { f: `${LOAN_REF}/${denom}`, z: FMT.ACCOUNTING });
     } else if (isEPI && epiLayer && !capitalize) {
       // Customized EPI layer: constant = (layer-start URPA cell) / (periods remaining to maturity)
