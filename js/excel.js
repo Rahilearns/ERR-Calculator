@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zr';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zs';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -618,9 +618,9 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     } else {
       setCell(ws, `F${xr}`, 0, { f: `F${pr}-E${xr}`, z: FMT.ACCOUNTING });
     }
-    // G Total COF (value), H Int Expense = URPA_prev * COF / 12
+    // G Total COF (own-month value); H Int Expense = previous month's URPA * previous month's COF / 12
     setCell(ws, `G${xr}`, numHi(r.cof), { z: FMT.PCT2 });
-    setCell(ws, `H${xr}`, 0, { f: `F${pr}*G${xr}/12`, z: FMT.ACCOUNTING });
+    setCell(ws, `H${xr}`, 0, { f: `F${pr}*G${pr}/12`, z: FMT.ACCOUNTING });
     // I Accrued
     setCell(ws, `I${xr}`, num(r.idpReceivable || 0), { z: FMT.ACCOUNTING });
     // J Loan Security Balance; K Loan Security Benefit = PRIOR row balance*(COF - secRate)/12 (one-month lag)

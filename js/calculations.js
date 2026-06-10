@@ -599,7 +599,9 @@ export function buildRateRevisionStructured(p) {
   // Loan Security Balance is released at maturity: show 0 on the final payment row.
   if (rows.length > 1) rows[rows.length - 1].securityAmount = 0;
 
-  applyIntExpenseAccrual(rows, 0, (i) => (rows[i].cof || 0) / 12);
+  // Int. Expense at month N = URPA(N-1) * COF(N-1) / 12 — the PREVIOUS month's URPA and
+  // COF (the COF prevailing at the start of the accrual month), per the rectified file.
+  applyIntExpenseAccrual(rows, 0, (i) => (rows[i - 1].cof || 0) / 12);
   return { rows };
 }
 
