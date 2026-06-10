@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zx';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zy';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -216,7 +216,8 @@ export function downloadVerificationExcel(filename, ctx) {
   //                 F = E_prev * COF / 12    (always non-zero from sl=1 through final)
   //   Where the page has no single Rate/COF input (Rate Revision Customized), the formula
   //   falls back to a hardcoded value so the column still totals correctly.
-  const schedHeaders = ['Sl.', 'Installment', 'Interest', 'Principal', 'URPA', 'Int. Expense (URPA*COF/12)', 'Accrued Interest'];
+  const schedHeaders = ['Sl.', 'Installment', 'Interest', 'Principal', 'URPA', 'Int. Expense (URPA*COF/12)', 'Accrued Interest',
+                        'NIM (Yield to Maturity)', 'ERR (Yield to Maturity)'];
   const wsSched = {};
   schedHeaders.forEach((h, c) => setCell(wsSched, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
 
@@ -348,8 +349,58 @@ export function downloadVerificationExcel(filename, ctx) {
     setCell(wsSched, XLSX.utils.encode_cell({ r: totalRowIdx, c: k + 1 }), 0,
       { f: `SUM(${col}2:${col}${lastDataRow})`, z: FMT.ACCOUNTING, s: { font: { bold: true } } });
   });
-  wsSched['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIdx, c: 6 } });
-  wsSched['!cols'] = schedHeaders.map(() => ({ wch: 18 }));
+  // NIM / ERR (Yield to Maturity): standing right AFTER each row's payment, the annualized
+  // NIM and ERR over the months remaining to maturity. Sl 0 reproduces the headline figures;
+  // the final row is left blank (nothing remains).
+  if (pageType === 'revisionCustomized') {
+    // Uploaded schedules run on arbitrary dates — compute day-count values (same method as
+    // the app's metrics): per period, expense = URPA_prev * COF * days/365, benefit =
+    // (COF - secRate) * secAmount * days/365, avg portfolio = exposure-weighted by days.
+    const rws = schedule.rows;
+    const cofData = params.cofData || [];
+    const secLayers = params.securityLayers || [];
+    const getCofOn = (ds) => { let r0 = 0; for (const e of cofData) { if (e.date <= ds) r0 = e.rate; else break; } return r0; };
+    const getSecOn = (ds) => {
+      let res = { amount: 0, rate: 0 }, best = null;
+      for (const l of secLayers) if (l.fromDate && l.fromDate <= ds && (best === null || l.fromDate >= best)) { best = l.fromDate; res = { amount: l.amount || 0, rate: l.activeRate || 0 }; }
+      return res;
+    };
+    for (let i = 0; i < rws.length - 1; i++) {
+      let inc = 0, exp = 0, ben = 0, exposure = 0;
+      for (let j = i + 1; j < rws.length; j++) {
+        const days = Math.max(1, (new Date(rws[j].date) - new Date(rws[j - 1].date)) / 86400000);
+        const cof = getCofOn(rws[j - 1].date);
+        const sec = getSecOn(rws[j - 1].date);
+        inc += rws[j].interest || 0;
+        exp += (rws[j - 1].urpa || 0) * cof * (days / 365);
+        ben += (cof - sec.rate) * sec.amount * (days / 365);
+        exposure += (rws[j - 1].urpa || 0) * days;
+      }
+      const totalDays = (new Date(rws[rws.length - 1].date) - new Date(rws[i].date)) / 86400000;
+      const avgPort = totalDays > 0 ? exposure / totalDays : 0;
+      const years = totalDays / 365;
+      const effCof = avgPort > 0 && years > 0 ? exp / avgPort / years : 0;
+      const nim = avgPort > 0 && years > 0 ? (inc + ben - exp) / avgPort / years : 0;
+      setCell(wsSched, `H${i + 2}`, nim, { z: FMT.PCT4 });
+      setCell(wsSched, `I${i + 2}`, nim + effCof, { z: FMT.PCT4 });
+    }
+  } else {
+    // Formula columns. Window rows (xr+1..last): income C, expense F; Loan Security Benefit
+    // = monthly benefit x remaining months (constant-rate modules); avg portfolio =
+    // AVERAGE(E xr..last-1); years = remainingMonths/12.
+    const benefitMonthly = (_idx.csAmount && _idx.totalCof && _idx.csRate)
+      ? `(${inputsSheet}B${_idx.csAmount}*(${inputsSheet}B${_idx.totalCof}-${inputsSheet}B${_idx.csRate})/12)` : null;
+    for (let xr = 2; xr < lastDataRow; xr++) {
+      const n = lastDataRow - xr; // remaining months
+      const benTerm = benefitMonthly ? `+${benefitMonthly}*${n}` : '';
+      const base = `AVERAGE(E${xr}:E${lastDataRow - 1})/(${n}/12)`;
+      setCell(wsSched, `H${xr}`, 0, { f: `(SUM(C${xr + 1}:C${lastDataRow})${benTerm}-SUM(F${xr + 1}:F${lastDataRow}))/${base}`, z: FMT.PCT4 });
+      setCell(wsSched, `I${xr}`, 0, { f: `H${xr}+SUM(F${xr + 1}:F${lastDataRow})/${base}`, z: FMT.PCT4 });
+    }
+  }
+
+  wsSched['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIdx, c: 8 } });
+  wsSched['!cols'] = schedHeaders.map((h, c) => ({ wch: c >= 7 ? 20 : 18 }));
 
   // ----- Inputs & Results sheet
   const wsInputs = {};
@@ -522,7 +573,8 @@ function downloadRevisionStructuredVerify(filename, ctx) {
 
   // ----- Schedule sheet -----
   const heads = ['Sl.', 'Date', 'Installment', 'Interest', 'Principal', 'URPA',
-                 'Total COF', 'Int. Expense (URPA*COF/12)', 'Accrued Interest', 'Loan Security Balance', 'Loan Security Benefit'];
+                 'Total COF', 'Int. Expense (URPA*COF/12)', 'Accrued Interest', 'Loan Security Balance', 'Loan Security Benefit',
+                 'NIM (Yield to Maturity)', 'ERR (Yield to Maturity)'];
   const ws = {};
   heads.forEach((h, c) => setCell(ws, XLSX.utils.encode_cell({ r: 0, c }), h, { text: true, s: STYLE.greenHeader }));
 
@@ -682,8 +734,20 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   ['C', 'D', 'E', 'H', 'K'].forEach((col) => {
     setCell(ws, `${col}${totalRow}`, 0, { f: `SUM(${col}2:${col}${lastDataRow})`, z: FMT.ACCOUNTING, s: { font: { bold: true } } });
   });
-  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tIdx, c: 10 } });
-  ws['!cols'] = heads.map((h, c) => ({ wch: c === 0 ? 6 : c === 1 ? 12 : 17 }));
+  // NIM / ERR (Yield to Maturity): standing right AFTER each row's payment, the annualized
+  // NIM and ERR over the months remaining to maturity. Window rows (xr+1..last): income D,
+  // Loan Security Benefit K, expense H; avg portfolio = start-of-month balances F(xr..last-1);
+  // years = remainingMonths/12. Sl 0 therefore reproduces the headline NIM/ERR; the final
+  // row is left blank (nothing remains).
+  for (let xr = 2; xr < lastDataRow; xr++) {
+    const n = lastDataRow - xr; // remaining months
+    const base = `AVERAGE(F${xr}:F${lastDataRow - 1})/(${n}/12)`;
+    setCell(ws, `L${xr}`, 0, { f: `(SUM(D${xr + 1}:D${lastDataRow})+SUM(K${xr + 1}:K${lastDataRow})-SUM(H${xr + 1}:H${lastDataRow}))/${base}`, z: FMT.PCT4 });
+    setCell(ws, `M${xr}`, 0, { f: `L${xr}+SUM(H${xr + 1}:H${lastDataRow})/${base}`, z: FMT.PCT4 });
+  }
+
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tIdx, c: 12 } });
+  ws['!cols'] = heads.map((h, c) => ({ wch: c === 0 ? 6 : c === 1 ? 12 : c >= 11 ? 20 : 17 }));
 
   // ----- Inputs & Results sheet -----
   const wsI = {};

@@ -699,6 +699,36 @@ select.field-error,
 }
 /* Calculate ERR spans the full width of its section. */
 .action-bar .primary-btn { flex: 1 1 auto; width: 100%; }
+/* Reset — outlined secondary action beside Calculate ERR */
+.reset-btn {
+  flex: 0 0 auto;
+  padding: 12px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.reset-btn:hover { border-color: #dc2626; color: #dc2626; }
+
+/* Reset confirmation modal */
+.confirm-card h3 { margin: 0 0 10px; font-size: 16px; }
+.confirm-card p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-soft); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.confirm-actions .danger-btn { padding: 9px 18px; font-size: 13px; }
+.ghost-btn.modal-ghost {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ghost-btn.modal-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
 /* Results */
 .results-grid {

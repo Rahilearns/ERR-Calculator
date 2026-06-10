@@ -2,22 +2,23 @@
 import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
-} from './components.js?v=20260603zx';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zx';
+  openModal, closeModal,
+} from './components.js?v=20260603zy';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zy';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zx';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zx';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft } from './storage.js?v=20260603zx';
+} from './calculations.js?v=20260603zy';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zy';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zy';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zx';
+} from './excel.js?v=20260603zy';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -35,6 +36,24 @@ function setTwoLineLabel(field, line1, line2) {
   lbl.textContent = line1 + ' ';
   lbl.appendChild(el('span', { class: 'lbl-line2' }, line2));
   if (icon) lbl.appendChild(icon);
+}
+
+// Reset button + professional confirmation modal. On confirm, the tab's saved draft is
+// cleared and the page re-rendered from scratch (blank fields, no uploads, no results).
+function resetButton(tabKey, rerender) {
+  const btn = el('button', { class: 'reset-btn', type: 'button' }, 'Reset');
+  btn.addEventListener('click', () => {
+    const yes = el('button', { class: 'danger-btn', type: 'button' }, 'Yes, Reset');
+    const back = el('button', { class: 'ghost-btn modal-ghost', type: 'button' }, 'Go Back');
+    yes.addEventListener('click', () => { clearDraft(tabKey); closeModal(); rerender(); });
+    back.addEventListener('click', closeModal);
+    openModal(el('div', { class: 'confirm-card' },
+      el('h3', {}, 'Reset all fields?'),
+      el('p', {}, 'This will clear every input on this page — including any uploaded files and calculated results — so you can start a fresh calculation. This action cannot be undone.'),
+      el('div', { class: 'confirm-actions' }, back, yes),
+    ));
+  });
+  return btn;
 }
 
 // ============================================================
@@ -137,7 +156,8 @@ export function renderRegularLoan(root) {
   refresh();
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
-  section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
+  section.appendChild(el('div', { class: 'action-bar' },
+    resetButton('regular', () => renderRegularLoan(root)), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -352,7 +372,8 @@ export function renderCustomizedLoan(root) {
   refresh();
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
-  section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
+  section.appendChild(el('div', { class: 'action-bar' },
+    resetButton('customized', () => renderCustomizedLoan(root)), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -593,7 +614,8 @@ export function renderRateRevisionStructured(root) {
   refresh();
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
-  section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
+  section.appendChild(el('div', { class: 'action-bar' },
+    resetButton('revisionStructured', () => renderRateRevisionStructured(root)), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -724,7 +746,8 @@ export function renderRateRevisionCustomized(root) {
   section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
-  section.appendChild(el('div', { class: 'action-bar' }, calcBtn));
+  section.appendChild(el('div', { class: 'action-bar' },
+    resetButton('revisionCustomized', () => renderRateRevisionCustomized(root)), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -758,7 +781,9 @@ export function renderRateRevisionCustomized(root) {
     const ctx = {
       pageType: 'revisionCustomized', pageTitle: 'Rate Revision — Customized',
       inputs: { ...inputs, uploadedRowsCount: uploadedRows.length },
-      params: {}, schedule, metrics,
+      // cofData + security layers ride along so the Verify Excel can compute the
+      // per-row NIM/ERR (yield to maturity) columns with the same day-count method.
+      params: { cofData, securityLayers: inputs.securityLayers }, schedule, metrics,
     };
     autoSaveSummary(ctx);
     renderResults(resultsPanel, ctx);
@@ -942,6 +967,8 @@ function attachDraftAutosave(tabKey, sectionEl, collector) {
   let last = '';
   let timer = null;
   function doSave() {
+    // Section replaced (e.g. after Reset): never save from a detached form.
+    if (!document.body.contains(sectionEl)) return;
     try {
       const data = collector();
       const ser = JSON.stringify(data);
