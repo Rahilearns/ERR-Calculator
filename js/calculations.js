@@ -504,6 +504,32 @@ export function buildRateRevisionStructured(p) {
     }
     return result;
   }
+  // Interest earned over an accrual period (startISO, endISO] on a constant balance.
+  // If no rate layer takes effect strictly inside the period, the nominal convention
+  // applies: balance * rate-at-period-start / nominalDivisor (12 monthly, 4 quarterly).
+  // If a revision's From Date falls inside the period (a non-due date), the period is
+  // split into day-count segments: balance * rate_i * days_i / 360 per segment — the
+  // fractional-interest treatment from the rectified file.
+  function periodInterest(balance, startISO, endISO, nominalDivisor) {
+    const cuts = [...new Set((rateLayers || [])
+      .map(l => l.fromDate)
+      .filter(fd => fd && fd > startISO && fd < endISO))].sort();
+    if (!cuts.length) {
+      return { interest: balance * getRateOn(startISO) / nominalDivisor, segments: null };
+    }
+    const bounds = [startISO, ...cuts, endISO];
+    const segments = [];
+    let interest = 0;
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const segStart = bounds[i], segEnd = bounds[i + 1];
+      const days = Math.round((new Date(segEnd) - new Date(segStart)) / 86400000);
+      const rate = getRateOn(segStart);
+      interest += balance * rate / 360 * days;
+      segments.push({ rate, from: segStart, to: segEnd, days });
+    }
+    return { interest, segments };
+  }
+
   // Security amount/rate effective on a date = the LAST layer whose fromDate <= date
   // (applies until the next layer's From; the last layer extends to maturity). Not lagged.
   function getSecurityOn(dateStr) {
@@ -533,18 +559,21 @@ export function buildRateRevisionStructured(p) {
 
   for (let m = 1; m <= tenorMonths; m++) {
     const d = fmt(addMonths(start, m));
-    // Lending rate applies on a one-month lag (value effective at the START of the accrual
-    // month = the previous row's date). COF is keyed to the row's OWN month (this row's date),
-    // so interest expense H(N) = URPA(N-1) * COF(N) / 12 — matching the rectified files.
+    // COF is keyed to the row's OWN month (this row's date); interest expense uses the
+    // PREVIOUS row's URPA and COF via applyIntExpenseAccrual — matching the rectified files.
     const accrualStart = fmt(addMonths(start, m - 1));
-    const ratePm = getRateOn(accrualStart);
     const cofPm = getCofOn(d);
     const sec = getSecurityOn(d); // security uses the current month's date
-    const monthlyRate = ratePm / 12;
 
     let installment = 0, interest = 0, principal = 0;
+    // rowRate: rate shown/used for this row's accrual (period-start rate; after a
+    // mid-period revision the row carries the NEW rate so block logic continues from it).
+    let rowRate = getRateOn(accrualStart), splitSegments = null, splitFromSl;
     if (m <= moratoriumMonths) {
-      interest = urpa * monthlyRate;
+      // Moratorium month: interest accrues monthly; a revision mid-month splits by days/360.
+      const pi = periodInterest(urpa, accrualStart, d, 12);
+      interest = pi.interest;
+      if (pi.segments) { splitSegments = pi.segments; splitFromSl = m - 1; rowRate = getRateOn(d); }
       accruedReceivable += interest;
       if (capFlags[m - 1]) {
         // Capitalized: fold accrued-but-unpaid interest into principal at this month-end.
@@ -561,14 +590,32 @@ export function buildRateRevisionStructured(p) {
       if (isPmtMonth) {
         const remainingMonths = tenorMonths - m + 1;
         const remainingPayments = (ppy === 12) ? remainingMonths : Math.ceil(remainingMonths / 3);
-        const periodRate = ratePm / ppy;
+        const step = (ppy === 12) ? 1 : 3;
+        // The payment period runs from the previous due date (or moratorium end) to this
+        // due date; a rate revision inside it splits the interest by days/360.
+        const periodStartISO = fmt(addMonths(start, m - step));
+        const pi = periodInterest(urpa, periodStartISO, d, ppy);
+        interest = pi.interest;
+        const rateAtStart = getRateOn(periodStartISO);
+        rowRate = pi.segments ? getRateOn(d) : rateAtStart;
+        if (pi.segments) { splitSegments = pi.segments; splitFromSl = m - step; }
         if (paymentModality === 'EMI' || paymentModality === 'EQI') {
-          installment = remainingPayments > 0 ? PMT(periodRate, remainingPayments, -urpa) : urpa * (1 + periodRate);
-          interest = urpa * periodRate;
+          if (pi.segments) {
+            // Mid-period revision: derive the constant installment X that amortises the
+            // balance to exactly 0 at maturity given this period's split interest and the
+            // new rate onward — closed form of the rectified file's Goal Seek:
+            //   X = (balance + split interest) / (1 + annuity(rNew, remainingPayments - 1))
+            const rNew = getRateOn(d) / ppy;
+            const k = remainingPayments - 1;
+            const annuity = k <= 0 ? 0 : (rNew === 0 ? k : (1 - Math.pow(1 + rNew, -k)) / rNew);
+            installment = (urpa + interest) / (1 + annuity);
+          } else {
+            const periodRate = rateAtStart / ppy;
+            installment = remainingPayments > 0 ? PMT(periodRate, remainingPayments, -urpa) : urpa * (1 + periodRate);
+          }
           principal = installment - interest;
         } else {
           principal = urpa / remainingPayments;
-          interest = urpa * periodRate;
           installment = principal + interest;
         }
         if (m === tenorMonths) {
@@ -590,9 +637,10 @@ export function buildRateRevisionStructured(p) {
     rows.push({
       sl: m, date: d, installment, interest, principal, urpa,
       interestExpense: 0, // populated below per applyIntExpenseAccrual
-      rate: ratePm, cof: cofPm,
+      rate: rowRate, cof: cofPm,
       securityAmount: sec.amount, securityRate: sec.rate,
       idpReceivable: accruedReceivable,
+      splitSegments: splitSegments || undefined, splitFromSl,
     });
   }
 

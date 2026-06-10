@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zs';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zt';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -546,7 +546,22 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     }
   }
 
+  // Day-count split interest for a row whose accrual period contains a rate revision on a
+  // non-due date: each segment = F(periodStart) * rate/360 * days. Period bounds use cell
+  // refs; the revision date(s) are DATE() literals. Mirrors the rectified file's D formula.
+  const dateLit = (iso) => { const [y, mo, da] = String(iso).split('-').map(Number); return `DATE(${y},${mo},${da})`; };
+  const splitDFormula = (r, xr) => {
+    const psXr = (r.splitFromSl || 0) + 2; // Excel row holding sl = splitFromSl (period start)
+    const segs = r.splitSegments;
+    return segs.map((s, i) => {
+      const startRef = i === 0 ? `B${psXr}` : dateLit(s.from);
+      const endRef = i === segs.length - 1 ? `B${xr}` : dateLit(s.to);
+      return `(F${psXr}*${pct(s.rate)}/360*(${endRef}-${startRef}))`;
+    }).join('+');
+  };
+
   let eqpPrevPayRow = null; // Excel row of the previous Equal-Principal payment (quarterly chains =E(prev))
+  let chainPayXr = null, chainRate = null; // annuity chaining after a goal-sought split payment
   rows.forEach((r, i) => {
     const xr = i + 2, pr = xr - 1;
     const d = new Date(r.date);
@@ -568,8 +583,11 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     const isMora = r.sl <= mora;
     const isPaymentRow = (r.installment || 0) > 0;
 
-    // D Interest = URPA_prev * lending rate / (12 or 4)
-    if (isMora) {
+    // D Interest = URPA_prev * lending rate / (12 or 4); day-count split when a rate
+    // revision falls inside the accrual period.
+    if (r.splitSegments) {
+      setCell(ws, `D${xr}`, 0, { f: splitDFormula(r, xr), z: FMT.ACCOUNTING });
+    } else if (isMora) {
       setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/12`, z: FMT.ACCOUNTING });
     } else if (isPaymentRow) {
       setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/${ppyDiv}`, z: FMT.ACCOUNTING });
@@ -583,8 +601,22 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       if (isPaymentRow) setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
       else setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
+    } else if (isPaymentRow && isAnnuity && r.splitSegments) {
+      // Mid-period revision: the installment is the goal-sought constant, written as a VALUE
+      // (per the rectified file); unpaid moratorium accrued (I prev) rides on top of it, so
+      // principal excludes it: E = C - D - I(prev). Full precision — the whole chain of
+      // subsequent =C(prev) installments references this cell, so 2dp would leave a residual.
+      setCell(ws, `C${xr}`, numHi(r.installment), { z: FMT.ACCOUNTING });
+      setCell(ws, `E${xr}`, 0, { f: `C${xr}-D${xr}-I${pr}`, z: FMT.ACCOUNTING });
+      chainPayXr = xr; chainRate = r.rate;
+    } else if (isPaymentRow && isAnnuity && chainPayXr !== null && r.rate === chainRate) {
+      // Same rate block as the goal-sought payment: installments stay constant, =C(prev payment).
+      setCell(ws, `C${xr}`, 0, { f: `C${chainPayXr}`, z: FMT.ACCOUNTING });
+      setCell(ws, `E${xr}`, 0, { f: `C${xr}-D${xr}`, z: FMT.ACCOUNTING });
+      chainPayXr = xr;
     } else if (isPaymentRow && isAnnuity) {
       // EMI/EQI annuity: installment via PMT (reset per rate block), principal = installment − interest.
+      chainPayXr = null; chainRate = null;
       const bStart = blockStartBySl[r.sl];
       const bRow = bStart + 1; // Excel row of sl=(bStart-1) holding balance going into the block
       const periodsExpr = ppyDiv === 12
