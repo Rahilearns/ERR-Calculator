@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zv';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zw';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -1099,17 +1099,22 @@ export async function downloadCofSample() {
 
 // Parse a COF worksheet grid → [{ date:'YYYY-MM-DD', rate }] from a Year/Month/Day/Date/COF
 // table (legend rows above the header are skipped). Returns [] if no COF column is found.
+// Rate column preference: exact "COF" (legacy template) → "Eligible COF" (current template,
+// the computed all-in rate the schedule uses) → any other header containing "COF".
 function parseCofGrid(ws) {
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
   let headerRow = -1;
   for (let i = 0; i < grid.length; i++) {
     const cells = (grid[i] || []).map(c => String(c ?? '').trim().toLowerCase());
-    if (cells.includes('cof')) { headerRow = i; break; }
+    if (cells.some(c => c.includes('cof'))) { headerRow = i; break; }
   }
   if (headerRow < 0) return [];
   const headers = grid[headerRow].map(c => String(c ?? '').trim().toLowerCase());
   const col = (name) => headers.indexOf(name);
-  const iYear = col('year'), iMonth = col('month'), iDay = col('day'), iDate = col('date'), iCof = col('cof');
+  const iYear = col('year'), iMonth = col('month'), iDay = col('day'), iDate = col('date');
+  let iCof = col('cof');
+  if (iCof < 0) iCof = col('eligible cof');
+  if (iCof < 0) iCof = headers.findIndex(h => h.includes('cof'));
   const out = [];
   for (let i = headerRow + 1; i < grid.length; i++) {
     const row = grid[i] || [];
