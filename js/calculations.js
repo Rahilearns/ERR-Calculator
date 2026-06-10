@@ -568,7 +568,7 @@ export function buildRateRevisionStructured(p) {
     let installment = 0, interest = 0, principal = 0;
     // rowRate: rate shown/used for this row's accrual (period-start rate; after a
     // mid-period revision the row carries the NEW rate so block logic continues from it).
-    let rowRate = getRateOn(accrualStart), splitSegments = null, splitFromSl;
+    let rowRate = getRateOn(accrualStart), splitSegments = null, splitFromSl, stubMonthsOut;
     if (m <= moratoriumMonths) {
       // Moratorium month: interest accrues monthly; a revision mid-month splits by days/360.
       const pi = periodInterest(urpa, accrualStart, d, 12);
@@ -587,9 +587,18 @@ export function buildRateRevisionStructured(p) {
     } else {
       const monthsSinceMora = m - moratoriumMonths;
       const isPmtMonth = (ppy === 12) || (monthsSinceMora % 3 === 0);
+      // Quarterly grid that doesn't divide the remaining tenor evenly leaves a 1-2 month
+      // stub; the leftover principal + its accrued interest is settled at maturity.
+      const stubAtMaturity = !isPmtMonth && m === tenorMonths;
       if (isPmtMonth) {
-        const remainingMonths = tenorMonths - m + 1;
-        const remainingPayments = (ppy === 12) ? remainingMonths : Math.ceil(remainingMonths / 3);
+        // Payments required to COVER the period from this due date to maturity — a partial
+        // final quarter still needs one payment, so quarterly uses ceil((months from the
+        // period start)/3). Equals the plain grid count when the tenor divides evenly;
+        // otherwise the installment is sized over the phantom final quarter and the
+        // residual principal lands on the maturity stub row.
+        const remainingPayments = (ppy === 12)
+          ? (tenorMonths - m + 1)
+          : Math.ceil((tenorMonths - m + 3) / 3);
         const step = (ppy === 12) ? 1 : 3;
         // The payment period runs from the previous due date (or moratorium end) to this
         // due date; a rate revision inside it splits the interest by days/360.
@@ -631,6 +640,24 @@ export function buildRateRevisionStructured(p) {
           accruedReceivable = 0;
         }
         urpa = Math.max(0, urpa - principal);
+      } else if (stubAtMaturity) {
+        // Maturity falls 1-2 months after the last quarterly due date: pay the outstanding
+        // principal plus the interest accrued on it since that due date (nominal monthly
+        // twelfths; a rate revision inside the stub splits by days/360).
+        const stubMonths = monthsSinceMora % 3;
+        const periodStartISO = fmt(addMonths(start, m - stubMonths));
+        const pi = periodInterest(urpa, periodStartISO, d, 12 / stubMonths);
+        interest = pi.interest;
+        rowRate = pi.segments ? getRateOn(d) : getRateOn(periodStartISO);
+        if (pi.segments) { splitSegments = pi.segments; splitFromSl = m - stubMonths; }
+        stubMonthsOut = stubMonths;
+        principal = urpa;
+        installment = principal + interest;
+        if (accruedReceivable > 0) { // moratorium accrued never collected (no grid payment fit)
+          installment += accruedReceivable;
+          accruedReceivable = 0;
+        }
+        urpa = 0;
       }
     }
 
@@ -641,6 +668,7 @@ export function buildRateRevisionStructured(p) {
       securityAmount: sec.amount, securityRate: sec.rate,
       idpReceivable: accruedReceivable,
       splitSegments: splitSegments || undefined, splitFromSl,
+      stubMonths: stubMonthsOut,
     });
   }
 

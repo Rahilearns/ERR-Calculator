@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zt';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zu';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -584,11 +584,13 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     const isPaymentRow = (r.installment || 0) > 0;
 
     // D Interest = URPA_prev * lending rate / (12 or 4); day-count split when a rate
-    // revision falls inside the accrual period.
+    // revision falls inside the accrual period; maturity stub accrues nominal months.
     if (r.splitSegments) {
       setCell(ws, `D${xr}`, 0, { f: splitDFormula(r, xr), z: FMT.ACCOUNTING });
     } else if (isMora) {
       setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/12`, z: FMT.ACCOUNTING });
+    } else if (isPaymentRow && r.stubMonths) {
+      setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}${r.stubMonths === 2 ? '*2' : ''}/12`, z: FMT.ACCOUNTING });
     } else if (isPaymentRow) {
       setCell(ws, `D${xr}`, 0, { f: `F${pr}*${pct(r.rate)}/${ppyDiv}`, z: FMT.ACCOUNTING });
     } else {
@@ -601,6 +603,11 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       if (isPaymentRow) setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
       else setCell(ws, `C${xr}`, 0, { z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { z: FMT.ACCOUNTING });
+    } else if (isPaymentRow && r.stubMonths) {
+      // Maturity stub (quarterly grid short of maturity): pay off the full outstanding
+      // balance plus the stub interest (+ any uncollected moratorium accrued).
+      setCell(ws, `E${xr}`, 0, { f: `F${pr}`, z: FMT.ACCOUNTING });
+      setCell(ws, `C${xr}`, 0, { f: `D${xr}+E${xr}+I${pr}`, z: FMT.ACCOUNTING });
     } else if (isPaymentRow && isAnnuity && r.splitSegments) {
       // Mid-period revision: the installment is the goal-sought constant, written as a VALUE
       // (per the rectified file); unpaid moratorium accrued (I prev) rides on top of it, so
@@ -619,9 +626,11 @@ function downloadRevisionStructuredVerify(filename, ctx) {
       chainPayXr = null; chainRate = null;
       const bStart = blockStartBySl[r.sl];
       const bRow = bStart + 1; // Excel row of sl=(bStart-1) holding balance going into the block
+      // Quarterly: payments required to COVER the remaining period (phantom final quarter
+      // when the tenor doesn't divide evenly) = ROUNDUP((tenor - blockStartSl + 1 + 2)/3).
       const periodsExpr = ppyDiv === 12
         ? `'Inputs & Results'!$B$10-Schedule!$A$${bRow}`
-        : `('Inputs & Results'!$B$10-Schedule!$A$${bRow})/3`;
+        : `ROUNDUP(('Inputs & Results'!$B$10-Schedule!$A$${bRow}+2)/3,0)`;
       const pmt = `PMT(${pct(r.rate)}/${ppyDiv},${periodsExpr},-Schedule!$F$${bRow},,0)`;
       setCell(ws, `C${xr}`, 0, { f: `${pmt}+I${pr}`, z: FMT.ACCOUNTING });
       setCell(ws, `E${xr}`, 0, { f: `C${xr}-D${xr}`, z: FMT.ACCOUNTING });
