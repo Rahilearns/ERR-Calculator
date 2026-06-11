@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zz';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zz';
+} from './components.js?v=20260603zza';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zza';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zz';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zz';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zz';
+} from './calculations.js?v=20260603zza';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zza';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zza';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zz';
+} from './excel.js?v=20260603zza';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -722,7 +722,6 @@ function collectRevisionStructuredInputs(f) {
 export function renderRateRevisionCustomized(root) {
   root.innerHTML = '';
   const section = el('div', { class: 'section-card' });
-  section.appendChild(el('h2', {}, 'Upload Amortization Schedule and COF Layers'));
 
   const fileInput = el('input', { type: 'file', accept: '.xlsx,.xls', style: 'display:none' });
   const uploadBtn = el('button', { class: 'secondary-btn', type: 'button' }, '⬆ Upload Excel');
@@ -745,11 +744,16 @@ export function renderRateRevisionCustomized(root) {
     } catch (err) { uploadedRows = null; uploadedCof = null; toast(err.message, 'error'); }
   });
 
-  const uploadField = el('div', { class: 'field' });
-  uploadField.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' },
-    uploadBtn, fileInput, uploadedLabel));
-  uploadField.appendChild(el('div', { style: 'margin-top:6px' }, sampleLink));
-  section.appendChild(el('div', { class: 'sub-card' }, uploadField));
+  // Distinguished upload-zone panel (dashed border, icon badge, title + hint).
+  const uploadZone = el('div', { class: 'upload-zone' },
+    el('div', { class: 'uz-head' },
+      el('span', { class: 'uz-icon' }, '⬆'),
+      el('div', { class: 'uz-titles' },
+        el('div', { class: 'uz-title' }, 'Upload Amortization Schedule and COF Layers'),
+        el('div', { class: 'uz-sub' }, 'One Excel file (.xlsx) with the Schedule and COF Layers sheets — use the sample as the template'))),
+    el('div', { class: 'uz-actions' }, uploadBtn, fileInput, uploadedLabel),
+    el('div', { class: 'uz-sample' }, sampleLink));
+  section.appendChild(el('div', { class: 'sub-card' }, uploadZone));
 
   // From-only security layers (no To Date) — each applies from its From until the next layer's From.
   const securityLayers = layeredField({
@@ -861,12 +865,16 @@ function cofUploadField(onParsed) {
       if (onParsed) onParsed(rows);
     } catch (err) { rows = null; status.textContent = 'Upload failed: ' + err.message; toast(err.message, 'error'); }
   });
-  const field = el('div', { class: 'field' });
-  const lbl = el('label', {}, 'COF Data Upload');
-  lbl.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
-  field.appendChild(lbl);
-  field.appendChild(el('div', { style: 'display:flex; gap:10px; align-items:center; flex-wrap:wrap' }, uploadBtn, fileInput, status));
-  field.appendChild(el('div', { style: 'margin-top:6px' }, sampleLink));
+  // Distinguished upload-zone panel (dashed border, icon badge, title + hint).
+  const title = el('div', { class: 'uz-title' }, 'COF Data Upload');
+  title.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
+  const field = el('div', { class: 'upload-zone' },
+    el('div', { class: 'uz-head' },
+      el('span', { class: 'uz-icon' }, '⬆'),
+      el('div', { class: 'uz-titles' }, title,
+        el('div', { class: 'uz-sub' }, 'Excel (.xlsx) — the filled-in COF sample workbook'))),
+    el('div', { class: 'uz-actions' }, uploadBtn, fileInput, status),
+    el('div', { class: 'uz-sample' }, sampleLink));
   return { field, getRows: () => rows };
 }
 

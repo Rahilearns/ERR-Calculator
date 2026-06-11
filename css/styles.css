@@ -730,6 +730,34 @@ select.field-error,
 }
 .ghost-btn.modal-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
+/* Upload zones — distinguished drop-zone style panels (COF Data Upload on Rate Revision
+   Structured; Schedule + COF Layers upload on Rate Revision Customized). */
+.upload-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(37, 70, 224, 0.035);
+  padding: 16px 18px;
+  transition: border-color 0.15s ease;
+}
+.upload-zone:hover { border-color: var(--primary); }
+[data-theme="dark"] .upload-zone { background: rgba(110, 140, 255, 0.06); }
+.uz-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.uz-icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-soft); color: var(--primary);
+  font-size: 17px; font-weight: 700; flex: 0 0 auto;
+}
+.uz-titles { min-width: 0; }
+.uz-title { font-size: 13.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.uz-sub { font-size: 11.5px; color: var(--text-soft); margin-top: 2px; line-height: 1.45; }
+.uz-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.uz-sample { margin-top: 8px; }
+@media (max-width: 600px) {
+  .upload-zone { padding: 14px; }
+  .uz-icon { width: 32px; height: 32px; font-size: 15px; }
+}
+
 /* Results */
 .results-grid {
   display: grid;
