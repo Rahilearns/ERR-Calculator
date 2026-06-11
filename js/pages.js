@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zy';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zy';
+} from './components.js?v=20260603zz';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zz';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zy';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zy';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zy';
+} from './calculations.js?v=20260603zz';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zz';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zz';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zy';
+} from './excel.js?v=20260603zz';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 
@@ -40,9 +40,17 @@ function setTwoLineLabel(field, line1, line2) {
 
 // Reset button + professional confirmation modal. On confirm, the tab's saved draft is
 // cleared and the page re-rendered from scratch (blank fields, no uploads, no results).
-function resetButton(tabKey, rerender) {
+// getState (optional) returns the page's serializable input state; it is snapshotted at
+// render time — the form is built blank and drafts are restored only afterwards — so a
+// click on a still-pristine page does nothing except a gentle note (no modal).
+function resetButton(tabKey, rerender, getState = null) {
   const btn = el('button', { class: 'reset-btn', type: 'button' }, 'Reset');
+  const pristine = getState ? JSON.stringify(getState()) : null;
   btn.addEventListener('click', () => {
+    if (pristine !== null && JSON.stringify(getState()) === pristine) {
+      toast('There is nothing to reset — no inputs have been made yet.');
+      return;
+    }
     const yes = el('button', { class: 'danger-btn', type: 'button' }, 'Yes, Reset');
     const back = el('button', { class: 'ghost-btn modal-ghost', type: 'button' }, 'Go Back');
     yes.addEventListener('click', () => { clearDraft(tabKey); closeModal(); rerender(); });
@@ -157,7 +165,10 @@ export function renderRegularLoan(root) {
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' },
-    resetButton('regular', () => renderRegularLoan(root)), calcBtn));
+    resetButton('regular', () => renderRegularLoan(root), () => collectRegularInputs({
+      loanAmount, offeredRate, moratoriumAvail, moratoriumPeriod, idpField,
+      loanTenor, paymentMode, totalCof, fundedSecurityType, csAmount, csRate, numInst,
+    })), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -373,7 +384,10 @@ export function renderCustomizedLoan(root) {
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' },
-    resetButton('customized', () => renderCustomizedLoan(root)), calcBtn));
+    resetButton('customized', () => renderCustomizedLoan(root), () => collectCustomizedInputs({
+      loanAmount, offeredRate, moratoriumAvail, moratoriumPeriod, idpField,
+      loanTenor, paymentLayers, totalCof, fundedSecurityType, csAmount, csRate, numInst,
+    })), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -615,7 +629,13 @@ export function renderRateRevisionStructured(root) {
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' },
-    resetButton('revisionStructured', () => renderRateRevisionStructured(root)), calcBtn));
+    resetButton('revisionStructured', () => renderRateRevisionStructured(root), () => ({
+      ...collectRevisionStructuredInputs({
+        initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
+        paymentModality, tenorMonths, rateLayers, securityLayers,
+      }),
+      cofRows: (cofUpload.getRows() || []).length,
+    })), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
@@ -747,7 +767,11 @@ export function renderRateRevisionCustomized(root) {
 
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' },
-    resetButton('revisionCustomized', () => renderRateRevisionCustomized(root)), calcBtn));
+    resetButton('revisionCustomized', () => renderRateRevisionCustomized(root), () => ({
+      uploadedRows: uploadedRows ? uploadedRows.length : 0,
+      uploadedCof: uploadedCof ? uploadedCof.length : 0,
+      securityLayers: securityLayers.getValue(),
+    })), calcBtn));
   root.appendChild(section);
   const resultsPanel = el('div');
   root.appendChild(resultsPanel);
