@@ -504,7 +504,7 @@ select.centered-input { text-align: center; text-align-last: center; }
   background: var(--bg);
   color: var(--text);
   border-radius: var(--radius-sm);
-  padding: 13px 4px;
+  padding: 8px 4px;
   text-align: center;
   cursor: pointer;
   user-select: none;
@@ -515,9 +515,10 @@ select.centered-input { text-align: center; text-align-last: center; }
 .month-box.paid { border-color: #cb9f4a; background: #e3c56a; color: #1a1a1a; }
 /* Two clicks = Capitalized (deep purple, white font) */
 .month-box.capitalized { border-color: #5b21b6; background: #5b21b6; color: #fff; }
-.month-box .mb-num { font-weight: 700; font-size: 15px; }
-.month-box.paid .mb-num { color: #1a1a1a; }
-.month-box.capitalized .mb-num { color: #fff; }
+.month-box .mb-num { font-weight: 700; font-size: 14px; }
+.month-box .mb-lbl { font-size: 10px; color: var(--text-soft); letter-spacing: 0.2px; }
+.month-box.paid .mb-num, .month-box.paid .mb-lbl { color: #1a1a1a; }
+.month-box.capitalized .mb-num, .month-box.capitalized .mb-lbl { color: #fff; }
 
 /* Bulk-action buttons — each styled like the box state it produces, on one line */
 .mora-bulk { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }

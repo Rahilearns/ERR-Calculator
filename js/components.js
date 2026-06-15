@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzb';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzc';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -313,6 +313,7 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       const cls = CLS[states[i]] || '';
       const box = el('div', { class: 'month-box' + (cls ? ' ' + cls : ''), 'data-month': i + 1 },
         el('div', { class: 'mb-num' }, String(i + 1).padStart(2, '0')),
+        el('div', { class: 'mb-lbl' }, 'Month'),
       );
       box.addEventListener('click', () => {
         states[i] = (states[i] + 1) % (maxState + 1);
