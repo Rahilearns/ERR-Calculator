@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zza';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzb';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -266,7 +266,8 @@ export function formatDDMMMYYYY(d) {
   return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
 
-// Month boxes — selectable equal-width boxes (max 6/row). Optional "Select all" checkbox.
+// Month boxes — click each box to cycle its state: none (accrue) → paid → capitalized.
+// Optional bulk-action buttons (set all to one state / clear) + a colour legend.
 export function monthBoxesField({ name, getCount, tooltip = '', label = '', selectAll = true, capitalizable = false }) {
   const wrapper = el('div', { class: 'field' });
   let states = []; // per month: 0 = none (accrue), 1 = paid, 2 = capitalized
@@ -276,42 +277,33 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
     const lbl = el('label', {}, label);
     if (tooltip) lbl.appendChild(infoIcon(tooltip));
     head.appendChild(lbl);
-    if (selectAll) {
-      const allLabel = el('label', { class: 'select-all-toggle' });
-      const allCb = el('input', { type: 'checkbox' });
-      allLabel.appendChild(allCb);
-      allLabel.appendChild(document.createTextNode(' Select all (paid)'));
-      head.appendChild(allLabel);
-      allCb.addEventListener('change', () => {
-        const v = allCb.checked ? 1 : 0;
-        states = states.map(() => v);
-        render();
-      });
-      wrapper._allCb = allCb;
-    }
     wrapper.appendChild(head);
   }
-  const grid = el('div', { class: 'month-boxes', 'data-name': name });
-  wrapper.appendChild(grid);
 
-  // Explanatory note below the boxes (only when capitalization is offered).
-  if (capitalizable) {
-    wrapper.appendChild(el('div', { class: 'mora-note' },
-      'Click a month to set how its accrued-but-unpaid interest is treated — ',
-      el('b', { class: 'mn-paid' }, 'one click = Paid'),
-      ' at that month-end, ',
-      el('b', { class: 'mn-cap' }, 'two clicks = Capitalized'),
-      ' into principal at that month-end (it then earns interest); a third click clears it. ',
-      'Unmarked months keep accruing until the next Paid/Capitalized month, or the first installment after the moratorium.',
+  // Bulk-action buttons — set every box to one state, or clear all. Each is styled like the
+  // box state it produces, so they're clearly distinguished. Kept on one line.
+  const setAll = (v) => { states = states.map(() => Math.min(v, maxState)); render(); };
+  if (selectAll && capitalizable) {
+    wrapper.appendChild(el('div', { class: 'mora-bulk' },
+      el('button', { type: 'button', class: 'mb-all mb-all-accrue', onclick: () => setAll(0) }, 'All Accrued'),
+      el('button', { type: 'button', class: 'mb-all mb-all-paid', onclick: () => setAll(1) }, 'All Paid'),
+      el('button', { type: 'button', class: 'mb-all mb-all-cap', onclick: () => setAll(2) }, 'All Capitalized'),
+      el('button', { type: 'button', class: 'mb-all mb-all-clear', onclick: () => setAll(0) }, 'Deselect All'),
     ));
   }
 
-  function syncAllCb() {
-    if (!wrapper._allCb) return;
-    const n = states.length;
-    wrapper._allCb.checked = n > 0 && states.every(s => s > 0);
-    wrapper._allCb.indeterminate = !wrapper._allCb.checked && states.some(s => s > 0);
+  const grid = el('div', { class: 'month-boxes', 'data-name': name });
+  wrapper.appendChild(grid);
+
+  // Colour legend below the boxes (one line): unclicked / mustard / purple.
+  if (capitalizable) {
+    wrapper.appendChild(el('div', { class: 'mora-legend' },
+      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-accrue' }), 'Interest amount to be accrued'),
+      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-paid' }), 'Interest amount to be paid'),
+      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-cap' }), 'Interest amount to be capitalized'),
+    ));
   }
+
   const CLS = { 1: 'paid', 2: 'capitalized' };
   function render() {
     const n = Math.max(0, getCount() || 0);
@@ -319,12 +311,8 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
     grid.innerHTML = '';
     for (let i = 0; i < n; i++) {
       const cls = CLS[states[i]] || '';
-      const box = el('div', {
-        class: 'month-box' + (cls ? ' ' + cls : ''),
-        'data-month': i + 1,
-      },
+      const box = el('div', { class: 'month-box' + (cls ? ' ' + cls : ''), 'data-month': i + 1 },
         el('div', { class: 'mb-num' }, String(i + 1).padStart(2, '0')),
-        el('div', { class: 'mb-lbl' }, 'Month'),
       );
       box.addEventListener('click', () => {
         states[i] = (states[i] + 1) % (maxState + 1);
@@ -332,7 +320,6 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       });
       grid.appendChild(box);
     }
-    syncAllCb();
   }
 
   wrapper.refresh = render;
