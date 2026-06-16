@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzd';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zze';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -280,16 +280,16 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
     wrapper.appendChild(head);
   }
 
-  // Bulk-action buttons — set every box to one state, or clear all. Each is styled like the
-  // box state it produces, so they're clearly distinguished. Kept on one line.
+  // Bulk-action buttons (right-aligned) — set every box to one state. The button whose state
+  // matches ALL the boxes stays sharp; the other two blur. A manual mix of states blurs all
+  // three, signalling that none is currently active.
   const setAll = (v) => { states = states.map(() => Math.min(v, maxState)); render(); };
+  const bulkBtns = {};
   if (selectAll && capitalizable) {
-    wrapper.appendChild(el('div', { class: 'mora-bulk' },
-      el('button', { type: 'button', class: 'mb-all mb-all-accrue', onclick: () => setAll(0) }, 'All Accrued'),
-      el('button', { type: 'button', class: 'mb-all mb-all-paid', onclick: () => setAll(1) }, 'All Paid'),
-      el('button', { type: 'button', class: 'mb-all mb-all-cap', onclick: () => setAll(2) }, 'All Capitalized'),
-      el('button', { type: 'button', class: 'mb-all mb-all-clear', onclick: () => setAll(0) }, 'Deselect All'),
-    ));
+    bulkBtns[0] = el('button', { type: 'button', class: 'mb-all mb-all-accrue', onclick: () => setAll(0) }, 'All Accrued');
+    bulkBtns[1] = el('button', { type: 'button', class: 'mb-all mb-all-paid', onclick: () => setAll(1) }, 'All Paid');
+    bulkBtns[2] = el('button', { type: 'button', class: 'mb-all mb-all-cap', onclick: () => setAll(2) }, 'All Capitalized');
+    wrapper.appendChild(el('div', { class: 'mora-bulk' }, bulkBtns[0], bulkBtns[1], bulkBtns[2]));
   }
 
   const grid = el('div', { class: 'month-boxes', 'data-name': name });
@@ -302,6 +302,14 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-paid' }), 'Interest amount to be paid'),
       el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-cap' }), 'Interest amount to be capitalized'),
     ));
+  }
+
+  // Sharpen the bulk button matching the current uniform state; blur the others. A mix of
+  // states (or no boxes) blurs all three.
+  function updateBulkActive() {
+    if (!bulkBtns[0]) return;
+    const uniform = states.length > 0 && states.every(s => s === states[0]) ? states[0] : null;
+    [0, 1, 2].forEach(s => { if (bulkBtns[s]) bulkBtns[s].classList.toggle('inactive', uniform !== s); });
   }
 
   const CLS = { 1: 'paid', 2: 'capitalized' };
@@ -321,6 +329,7 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
       });
       grid.appendChild(box);
     }
+    updateBulkActive();
   }
 
   wrapper.refresh = render;
