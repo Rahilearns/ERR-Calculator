@@ -499,10 +499,24 @@ select.centered-input { text-align: center; text-align-last: center; }
 @media (max-width: 600px) {
   .month-boxes { grid-template-columns: repeat(3, 1fr); }
 }
+/* Moratorium box palette — soft pastels in light mode, deep tints in dark mode so the
+   #f5f5f5 text stays readable. accrued (blue) / paid (green) / capitalized (amber). */
+:root {
+  --mb-accrue-bg: #eaf2ff; --mb-accrue-bd: #c9dcf7;
+  --mb-paid-bg:   #e8f7f0; --mb-paid-bd:   #c4e7d6;
+  --mb-cap-bg:    #fff4e5; --mb-cap-bd:    #f2ddbd;
+  --mb-text: #1a1a1a;
+}
+[data-theme="dark"] {
+  --mb-accrue-bg: #243a57; --mb-accrue-bd: #34507a;
+  --mb-paid-bg:   #1f3d30; --mb-paid-bd:   #2e5a47;
+  --mb-cap-bg:    #473720; --mb-cap-bd:    #6b532f;
+  --mb-text: #f5f5f5;
+}
 .month-box {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--mb-accrue-bd);
+  background: var(--mb-accrue-bg);
+  color: var(--mb-text);
   border-radius: var(--radius-sm);
   padding: 8px 4px;
   text-align: center;
@@ -511,14 +525,12 @@ select.centered-input { text-align: center; text-align-last: center; }
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .month-box:hover { border-color: var(--primary); }
-/* One click = Paid (soothing mustard yellow, black font) */
-.month-box.paid { border-color: #cb9f4a; background: #e3c56a; color: #1a1a1a; }
-/* Two clicks = Capitalized (deep purple, white font) */
-.month-box.capitalized { border-color: #5b21b6; background: #5b21b6; color: #fff; }
-.month-box .mb-num { font-weight: 700; font-size: 14px; }
-.month-box .mb-lbl { font-size: 10px; color: var(--text-soft); letter-spacing: 0.2px; }
-.month-box.paid .mb-num, .month-box.paid .mb-lbl { color: #1a1a1a; }
-.month-box.capitalized .mb-num, .month-box.capitalized .mb-lbl { color: #fff; }
+/* One click = Paid (green) */
+.month-box.paid { border-color: var(--mb-paid-bd); background: var(--mb-paid-bg); }
+/* Two clicks = Capitalized (amber) */
+.month-box.capitalized { border-color: var(--mb-cap-bd); background: var(--mb-cap-bg); }
+.month-box .mb-num { font-weight: 700; font-size: 14px; color: var(--mb-text); }
+.month-box .mb-lbl { font-size: 10px; color: var(--mb-text); opacity: 0.7; letter-spacing: 0.2px; }
 
 /* Bulk-action buttons — each styled like the box state it produces, on one line */
 .mora-bulk { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
@@ -534,9 +546,10 @@ select.centered-input { text-align: center; text-align-last: center; }
   transition: box-shadow 0.12s ease, filter 0.12s ease;
 }
 .mb-all:hover { box-shadow: 0 1px 5px rgba(0, 0, 0, 0.16); }
-.mb-all-paid { background: #e3c56a; border-color: #cb9f4a; color: #1a1a1a; }
-.mb-all-cap { background: #5b21b6; border-color: #5b21b6; color: #fff; }
-.mb-all-clear { border-style: dashed; color: var(--text-soft); margin-left: auto; }
+.mb-all-accrue { background: var(--mb-accrue-bg); border-color: var(--mb-accrue-bd); color: var(--mb-text); }
+.mb-all-paid { background: var(--mb-paid-bg); border-color: var(--mb-paid-bd); color: var(--mb-text); }
+.mb-all-cap { background: var(--mb-cap-bg); border-color: var(--mb-cap-bd); color: var(--mb-text); }
+.mb-all-clear { background: var(--bg); border-style: dashed; color: var(--text-soft); margin-left: auto; }
 .mb-all-clear:hover { border-color: #dc2626; color: #dc2626; box-shadow: none; }
 
 /* Colour legend below the moratorium boxes (one line) */
@@ -549,9 +562,9 @@ select.centered-input { text-align: center; text-align-last: center; }
 }
 .lg-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lg-sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
-.lg-accrue { background: var(--bg); border-color: var(--border); }
-.lg-paid { background: #e3c56a; border-color: #cb9f4a; }
-.lg-cap { background: #5b21b6; border-color: #5b21b6; }
+.lg-accrue { background: var(--mb-accrue-bg); border-color: var(--mb-accrue-bd); }
+.lg-paid { background: var(--mb-paid-bg); border-color: var(--mb-paid-bd); }
+.lg-cap { background: var(--mb-cap-bg); border-color: var(--mb-cap-bd); }
 @media (max-width: 600px) { .mora-legend { gap: 10px; font-size: 10px; } }
 
 /* Info icon — click toggles a popover (no hover behavior) */
