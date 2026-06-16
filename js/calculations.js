@@ -553,18 +553,19 @@ export function buildRateRevisionStructured(p) {
     return { interest, segments };
   }
 
-  // Security amount/rate effective on a date = the LAST layer whose fromDate <= date
-  // (applies until the next layer's From; the last layer extends to maturity). Not lagged.
+  // Loan security effective on a date: each layer is the INCREMENTAL amount taken on its
+  // fromDate at its rate. The balance = cumulative sum of all layers active by that date;
+  // the rate = amount-weighted average of those active layers' rates. Not lagged.
   function getSecurityOn(dateStr) {
     if (!securityLayers || !securityLayers.length) return { amount: 0, rate: 0 };
-    let result = { amount: 0, rate: 0 };
-    let bestFrom = null;
+    let cum = 0, weighted = 0;
     for (const r of securityLayers) {
-      if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
-        bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
+      if (r.fromDate && r.fromDate <= dateStr) {
+        const a = r.amount || 0;
+        cum += a; weighted += a * (r.activeRate || 0);
       }
     }
-    return result;
+    return { amount: cum, rate: cum > 0 ? weighted / cum : 0 };
   }
 
   const rows = [];
@@ -711,7 +712,7 @@ export function buildCofData(uploadedCof, disbursementISO, maturityISO) {
   if (!uploadedCof || !uploadedCof.length) return { cofData: [], warning: null };
   const sorted = uploadedCof
     .filter(e => e.date && (e.rate !== null && e.rate !== undefined))
-    .map(e => ({ date: e.date, rate: Number(e.rate) }))
+    .map(e => ({ date: e.date, rate: Number(e.rate), cof: e.cof, isc: e.isc }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   // Only consider records effective on/before maturity.
   const filtered = maturityISO ? sorted.filter(e => e.date <= maturityISO) : sorted;
@@ -790,13 +791,15 @@ export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers 
       return result;
     };
     const getSecOn = (dateStr) => {
-      // Last security layer whose From <= date (applies until the next layer's From / maturity).
-      let result = { amount: 0, rate: 0 }, bestFrom = null;
+      // Incremental layers: balance = cumulative amount active by the date; rate = amount-
+      // weighted average of those active layers' rates.
+      let cum = 0, weighted = 0;
       for (const r of (securityLayers || []))
-        if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
-          bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
+        if (r.fromDate && r.fromDate <= dateStr) {
+          const a = r.amount || 0;
+          cum += a; weighted += a * (r.activeRate || 0);
         }
-      return result;
+      return { amount: cum, rate: cum > 0 ? weighted / cum : 0 };
     };
     for (let i = 1; i < rows.length; i++) {
       const prev = rows[i - 1];

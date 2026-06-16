@@ -773,6 +773,28 @@ select.field-error,
 }
 .ghost-btn.modal-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
+/* COF-coverage hard block (Rate Revision) — big blocking popup, X in the top-right corner */
+.modal-card--cof { width: min(540px, 94vw); }
+.cof-block-card { position: relative; text-align: center; padding: 6px 10px 4px; }
+.cof-block-x {
+  position: absolute; top: -16px; right: -16px;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text-soft); font-size: 22px; line-height: 1; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cof-block-x:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.cof-block-icon {
+  width: 66px; height: 66px; margin: 8px auto 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; color: var(--danger); background: var(--danger-soft, rgba(213, 63, 76, 0.12));
+}
+.cof-block-msg {
+  margin: 0 auto; max-width: 32ch;
+  font-size: 17px; font-weight: 600; line-height: 1.55; color: var(--text);
+}
+
 /* Upload zones — distinguished drop-zone style panels (COF Data Upload on Rate Revision
    Structured; Schedule + COF Layers upload on Rate Revision Customized). */
 .upload-zone {

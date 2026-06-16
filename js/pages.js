@@ -3,24 +3,26 @@ import {
   el, numberField, percentField, optionField, dateField,
   monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zze';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zze';
+} from './components.js?v=20260603zzf';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzf';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zze';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zze';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zze';
+} from './calculations.js?v=20260603zzf';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzf';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzf';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zze';
+} from './excel.js?v=20260603zzf';
 
 const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
+// The new (incremental) loan-security model: each row is an amount taken on a date at a rate.
+const SECURITY_LAYERS_HELP = 'Add each security amount as you take it from the client (incremental), with its date and rate. The system accumulates the balance and computes the amount-weighted average rate across the active layers.';
 
 // Cached page state by tab key (also persisted via storage saveDraft)
 const tabState = {};
@@ -62,6 +64,29 @@ function resetButton(tabKey, rerender, getState = null) {
     ));
   });
   return btn;
+}
+
+// A hard block (Rate Revision modules): if the uploaded COF data does not reach back to the
+// disbursement date, ERR cannot be computed — the earliest months would have no cost of fund.
+// Show a big blocking popup with an X in the top-right corner; nothing proceeds until the user
+// closes it. Returns true when COF covers from disbursement, false (and shows the popup) otherwise.
+function ensureCofCoversDisbursement(cofData, disbursementISO) {
+  if (cofData && cofData.length && disbursementISO && cofData[0].date <= disbursementISO) return true;
+  const x = el('button', { class: 'cof-block-x', type: 'button', title: 'Close', 'aria-label': 'Close' }, '×');
+  const card = el('div', { class: 'cof-block-card' },
+    x,
+    el('div', { class: 'cof-block-icon' }, '⚠'),
+    el('p', { class: 'cof-block-msg' },
+      'Please insert Cost of Fund data covering the period starting from the date of disbursement.'),
+  );
+  openModal(card);
+  const mc = document.getElementById('modal-card');
+  mc.classList.add('modal-card--cof');
+  const dismiss = () => { mc.classList.remove('modal-card--cof'); closeModal(); };
+  x.addEventListener('click', dismiss);
+  const backdrop = document.querySelector('#modal-root .modal-backdrop');
+  if (backdrop) backdrop.onclick = dismiss;
+  return false;
 }
 
 // ============================================================
@@ -586,6 +611,7 @@ export function renderRateRevisionStructured(root) {
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
     addLabel: '+ Add Security Layer',
+    help: SECURITY_LAYERS_HELP,
     minRows: 1,
     initialRows: 1,
     cascadingFromKey: 'fromDate',
@@ -673,9 +699,10 @@ export function renderRateRevisionStructured(root) {
       if (lastSecFrom && mat && lastSecFrom >= mat) return toast(`The last Loan Security Layer's From Date (${lastSecFrom}) must be earlier than loan maturity (${mat}).`, 'error');
     }
 
-    // Build COF effective-date data from the uploaded file (0% before first record; cut at maturity).
-    const { cofData, warning } = buildCofData(cofUpload.getRows(), inputs.disbursementDate, mat);
-    if (warning) toast(warning, 'warn');
+    // Build COF effective-date data from the uploaded file (cut at maturity). COF must cover from
+    // the disbursement date — otherwise ERR is not calculated and a blocking popup is shown.
+    const { cofData } = buildCofData(cofUpload.getRows(), inputs.disbursementDate, mat);
+    if (!ensureCofCoversDisbursement(cofData, inputs.disbursementDate)) return;
 
     const mora = inputs.moratoriumAvail === 'Yes' ? inputs.moratoriumPeriod : 0;
     const params = {
@@ -764,7 +791,7 @@ export function renderRateRevisionCustomized(root) {
       { key: 'amount', label: 'Amount', type: 'number' },
       { key: 'activeRate', label: 'Active Rate', type: 'percent' },
     ],
-    minRows: 1, initialRows: 1, addLabel: '+ Add Security Layer',
+    minRows: 1, initialRows: 1, addLabel: '+ Add Security Layer', help: SECURITY_LAYERS_HELP,
   });
 
   section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
@@ -786,8 +813,8 @@ export function renderRateRevisionCustomized(root) {
     // span (first row = disbursement, last row = maturity), mirroring Rate Revision — Structured.
     const firstDate = uploadedRows[0] && uploadedRows[0].date;
     const lastDate = uploadedRows[uploadedRows.length - 1] && uploadedRows[uploadedRows.length - 1].date;
-    const { cofData, warning } = buildCofData(uploadedCof, firstDate, lastDate);
-    if (warning) toast(warning, 'warn');
+    const { cofData } = buildCofData(uploadedCof, firstDate, lastDate);
+    if (!ensureCofCoversDisbursement(cofData, firstDate)) return;
     const inputs = {
       securityLayers: securityLayers.getValue().filter(r => r.fromDate),
       cofRecords: (cofData || []).length,
