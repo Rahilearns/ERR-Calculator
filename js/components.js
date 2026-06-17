@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzf';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzg';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -87,6 +87,20 @@ export function numberField({ label, name, placeholder = '', help = '', integerO
   };
   field.input = input;
   field.setLabel = (text) => updateLabel(field, text);
+  return field;
+}
+
+// Plain free-text field (any characters). Used for the optional "Add Reference" tag.
+export function textField({ label, name, placeholder = '', help = '' }) {
+  const id = nextId();
+  const input = el('input', { id, type: 'text', placeholder, autocomplete: 'off', 'data-name': name, class: 'text-input' });
+  const field = el('div', { class: 'field' });
+  field.appendChild(el('label', { for: id }, label));
+  field.appendChild(input);
+  if (help) field.appendChild(el('span', { class: 'help' }, help));
+  field.getValue = () => input.value.trim();
+  field.setValue = (v) => { input.value = (v === null || v === undefined) ? '' : String(v); };
+  field.input = input;
   return field;
 }
 
@@ -295,17 +309,8 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   const grid = el('div', { class: 'month-boxes', 'data-name': name });
   wrapper.appendChild(grid);
 
-  // Colour legend below the boxes (one line): unclicked / mustard / purple.
-  if (capitalizable) {
-    wrapper.appendChild(el('div', { class: 'mora-legend' },
-      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-accrue' }), 'Interest amount to be accrued'),
-      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-paid' }), 'Interest amount to be paid'),
-      el('span', { class: 'lg-item' }, el('span', { class: 'lg-sw lg-cap' }), 'Interest amount to be capitalized'),
-    ));
-  }
-
-  // Sharpen the bulk button matching the current uniform state; blur the others. A mix of
-  // states (or no boxes) blurs all three.
+  // Highlight the bulk button matching the current uniform state; the other two fade (lower
+  // vibrancy). A mix of states (or no boxes) fades all three — none is active.
   function updateBulkActive() {
     if (!bulkBtns[0]) return;
     const uniform = states.length > 0 && states.every(s => s === states[0]) ? states[0] : null;

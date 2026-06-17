@@ -1,11 +1,12 @@
 // App controller: tabs, theme, compare view
-import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603zzf';
+import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603zzg';
 import {
   renderRegularLoan, renderCustomizedLoan,
   renderRateRevisionStructured, renderRateRevisionCustomized,
-} from './pages.js?v=20260603zzf';
-import { listSummaries, deleteSummary } from './storage.js?v=20260603zzf';
-import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603zzf';
+} from './pages.js?v=20260603zzg';
+import { listSummaries, deleteSummary } from './storage.js?v=20260603zzg';
+import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603zzg';
+import { openManual } from './manual.js?v=20260603zzg';
 
 const root = document.getElementById('app-root');
 const compareBtn = document.getElementById('compare-btn');
@@ -37,6 +38,9 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 
 // ---------------- Brand back to first tab ----------------
 document.getElementById('brand-home').addEventListener('click', () => navigate('regular'));
+
+// ---------------- Info button → per-module user guide ----------------
+document.getElementById('info-btn').addEventListener('click', () => openManual(TABS[currentTab] ? currentTab : 'regular'));
 
 // ---------------- Compare button visibility ----------------
 function refreshCompareVisibility() {

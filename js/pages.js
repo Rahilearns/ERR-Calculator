@@ -1,26 +1,25 @@
 // Page builders for the four calculation flows
 import {
-  el, numberField, percentField, optionField, dateField,
-  monthBoxesField, layeredField, toast, infoIcon, parseDDMMMYYYY, formatDDMMMYYYY,
+  el, numberField, percentField, optionField, dateField, textField,
+  monthBoxesField, layeredField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzf';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzf';
+} from './components.js?v=20260603zzg';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzg';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzf';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzf';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzf';
+} from './calculations.js?v=20260603zzg';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzg';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzg';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzf';
+} from './excel.js?v=20260603zzg';
 
-const IDP_TOOLTIP = 'Tick the months in which the borrower actually pays interest during moratorium. Unticked months accrue and are collected at the next paid month — or rolled into the first installment after moratorium.';
 // The new (incremental) loan-security model: each row is an amount taken on a date at a rate.
 const SECURITY_LAYERS_HELP = 'Add each security amount as you take it from the client (incremental), with its date and rate. The system accumulates the balance and computes the amount-weighted average rate across the active layers.';
 
@@ -110,7 +109,7 @@ export function renderRegularLoan(root) {
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); });
 
   const idpField = monthBoxesField({
-    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    name: 'idpFlags', label: 'Interest During Moratorium Period',
     getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
 
@@ -292,7 +291,7 @@ export function renderCustomizedLoan(root) {
   const moratoriumPeriod = numberField({ label: 'Moratorium Period (Months)', name: 'moratoriumPeriod', integerOnly: true, min: 1 });
   moratoriumPeriod.input.addEventListener('input', () => { refresh(); refreshLayerOpts(); paymentLayers.applyLayerRules(); });
   const idpField = monthBoxesField({
-    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    name: 'idpFlags', label: 'Interest During Moratorium Period',
     getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
   const loanTenor = numberField({ label: 'Loan Tenor (Months)', name: 'loanTenor', integerOnly: true, min: 1 });
@@ -561,7 +560,7 @@ export function renderRateRevisionStructured(root) {
   moratoriumPeriod.input.addEventListener('input', refresh);
 
   const idpField = monthBoxesField({
-    name: 'idpFlags', label: 'Interest During Moratorium Period', tooltip: IDP_TOOLTIP,
+    name: 'idpFlags', label: 'Interest During Moratorium Period',
     getCount: () => moratoriumPeriod.getValue() || 0, selectAll: true, capitalizable: true,
   });
 
@@ -632,6 +631,12 @@ export function renderRateRevisionStructured(root) {
   const cofUpload = cofUploadField();
   const cofField = cofUpload.field;
 
+  // Optional free-text reference — prefixed onto every downloaded file's name for this calc.
+  const referenceField = textField({
+    label: 'Add Reference', name: 'reference', placeholder: 'e.g. loan account / proposal no. (optional)',
+    help: 'Optional. Prefixed to the start of every downloaded file name (separated by an underscore).',
+  });
+
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
   section.appendChild(el('div', { class: 'form-row' }, moratoriumAvail, moratoriumPeriod));
   const moraSection = el('div', { class: 'form-row full hidden' });
@@ -641,6 +646,7 @@ export function renderRateRevisionStructured(root) {
   section.appendChild(el('div', { class: 'sub-card' }, rateLayers));
   section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
   section.appendChild(el('div', { class: 'sub-card' }, cofField));
+  section.appendChild(el('div', { class: 'form-row' }, referenceField));
 
   function refresh() {
     const moraYes = moratoriumAvail.getValue() === 'Yes';
@@ -658,7 +664,7 @@ export function renderRateRevisionStructured(root) {
     resetButton('revisionStructured', () => renderRateRevisionStructured(root), () => ({
       ...collectRevisionStructuredInputs({
         initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-        paymentModality, tenorMonths, rateLayers, securityLayers,
+        paymentModality, tenorMonths, rateLayers, securityLayers, referenceField,
       }),
       cofRows: (cofUpload.getRows() || []).length,
     })), calcBtn));
@@ -668,19 +674,19 @@ export function renderRateRevisionStructured(root) {
 
   restoreDraft('revisionStructured', {
     initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-    paymentModality, tenorMonths, rateLayers, securityLayers,
+    paymentModality, tenorMonths, rateLayers, securityLayers, referenceField,
   });
   refresh();
   setTimeout(() => { rateLayers.applyLayerRules(); securityLayers.applyLayerRules(); }, 150);
   attachDraftAutosave('revisionStructured', section, () => collectRevisionStructuredInputs({
     initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-    paymentModality, tenorMonths, rateLayers, securityLayers,
+    paymentModality, tenorMonths, rateLayers, securityLayers, referenceField,
   }));
 
   calcBtn.addEventListener('click', () => {
     const inputs = collectRevisionStructuredInputs({
       initialAmount, disbursementDate, moratoriumAvail, moratoriumPeriod, idpField,
-      paymentModality, tenorMonths, rateLayers, securityLayers,
+      paymentModality, tenorMonths, rateLayers, securityLayers, referenceField,
     });
     if (!inputs.initialAmount) return toast('Enter Initial Loan Amount.', 'error');
     if (!inputs.disbursementDate) return toast('Enter Disbursement Date.', 'error');
@@ -740,6 +746,7 @@ function collectRevisionStructuredInputs(f) {
     tenorMonths: f.tenorMonths.getValue(),
     rateLayers: f.rateLayers.getValue().filter(r => r.fromDate && r.activeRate !== null),
     securityLayers: f.securityLayers.getValue().filter(r => r.fromDate && r.amount),
+    reference: f.referenceField ? f.referenceField.getValue() : '',
   };
 }
 
@@ -796,6 +803,13 @@ export function renderRateRevisionCustomized(root) {
 
   section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
 
+  // Optional free-text reference — prefixed onto every downloaded file's name for this calc.
+  const referenceField = textField({
+    label: 'Add Reference', name: 'reference', placeholder: 'e.g. loan account / proposal no. (optional)',
+    help: 'Optional. Prefixed to the start of every downloaded file name (separated by an underscore).',
+  });
+  section.appendChild(el('div', { class: 'form-row' }, referenceField));
+
   const calcBtn = el('button', { class: 'primary-btn', type: 'button' }, 'Calculate ERR');
   section.appendChild(el('div', { class: 'action-bar' },
     resetButton('revisionCustomized', () => renderRateRevisionCustomized(root), () => ({
@@ -818,6 +832,7 @@ export function renderRateRevisionCustomized(root) {
     const inputs = {
       securityLayers: securityLayers.getValue().filter(r => r.fromDate),
       cofRecords: (cofData || []).length,
+      reference: referenceField.getValue(),
     };
     const metrics = computeRevisionCustomizedMetrics(uploadedRows, {
       securityLayers: inputs.securityLayers,
@@ -894,7 +909,6 @@ function cofUploadField(onParsed) {
   });
   // Distinguished upload-zone panel (dashed border, icon badge, title + hint).
   const title = el('div', { class: 'uz-title' }, 'COF Data Upload');
-  title.appendChild(infoIcon('Upload the Cost of Fund (COF/ISC + OPEX) effective-date schedule. Each COF rate is effective from its date until the day before the next. Download the sample, edit only the input values, then upload.'));
   const field = el('div', { class: 'upload-zone' },
     el('div', { class: 'uz-head' },
       el('span', { class: 'uz-icon' }, '⬆'),
@@ -948,8 +962,12 @@ function renderResults(panel, ctx) {
   }
   card.appendChild(grid);
 
-  // Top-right actions: Download Report (left), Verify Calculation (right)
-  const baseFname = ctx.pageTitle.replace(/[^a-z0-9]+/gi, '_') + '_' + new Date().toISOString().slice(0, 10);
+  // Top-right actions: Download Report (left), Verify Calculation (right).
+  // Optional user reference is prefixed to every file name (sanitized of OS-illegal chars).
+  const refRaw = (ctx.inputs && ctx.inputs.reference) ? String(ctx.inputs.reference) : '';
+  const refPrefix = refRaw.replace(/[\\/:*?"<>|]+/g, '').trim();
+  const baseFname = (refPrefix ? refPrefix + '_' : '') +
+    ctx.pageTitle.replace(/[^a-z0-9]+/gi, '_') + '_' + new Date().toISOString().slice(0, 10);
   const reportBtn = el('button', { class: 'secondary-btn', type: 'button' }, '📄 Download Report');
   const verifyBtn = el('button', { class: 'verify-btn', type: 'button' }, 'Verify Calculation');
   reportBtn.addEventListener('click', () => downloadReportPDF(baseFname + '_Report.pdf', ctx));
@@ -1109,6 +1127,7 @@ function restoreDraft(tabKey, fields) {
         cofRate: L.cofRate,
       })));
     }
+    if (fields.referenceField && data.reference !== undefined) fields.referenceField.setValue(data.reference);
   } catch (err) {
     console.warn('Draft restore failed', err);
   }

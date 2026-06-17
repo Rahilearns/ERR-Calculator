@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzf';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzg';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -770,8 +770,28 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     const sAmt = secAmtCell(r.date);
     if (isLast || !sAmt) setCell(ws, `J${xr}`, 0, { z: FMT.ACCOUNTING });
     else setCell(ws, `J${xr}`, 0, { f: sAmt, z: FMT.ACCOUNTING });
-    const sRatePrev = secRateCell(rows[i - 1].date);
-    setCell(ws, `K${xr}`, 0, { f: `J${pr}*(G${pr}-${sRatePrev || '0'})/12`, z: FMT.ACCOUNTING });
+    // K Loan Security Benefit. A security amount taken mid-period (fromDate strictly inside
+    // [prev date, this date]) splits the month by DAYS360 — each segment on its own cumulative
+    // balance ($M$) and weighted rate ($N$), both vs the period-start COF. Else flat /12.
+    const d0s = rows[i - 1].date, d1s = r.date;
+    const benCuts = securityLayers.filter(l => l.fromDate > d0s && l.fromDate < d1s).map(l => l.fromDate).sort();
+    if (!benCuts.length) {
+      const sRatePrev = secRateCell(d0s);
+      setCell(ws, `K${xr}`, 0, { f: `J${pr}*(G${pr}-${sRatePrev || '0'})/12`, z: FMT.ACCOUNTING });
+    } else {
+      const layerJCell = (fromDate) => `${LAYER}!$J$${3 + securityLayers.findIndex(l => l.fromDate === fromDate)}`;
+      const bounds = [d0s, ...benCuts, d1s];
+      const terms = [];
+      for (let k = 0; k < bounds.length - 1; k++) {
+        const segStart = bounds[k];
+        const bal = k === 0 ? `J${pr}` : (secAmtCell(segStart) || '0');
+        const rate = secRateCell(segStart) || '0';
+        const startRef = k === 0 ? `B${pr}` : layerJCell(segStart);
+        const endRef = k === bounds.length - 2 ? `B${xr}` : layerJCell(bounds[k + 1]);
+        terms.push(`${bal}*(G${pr}-${rate})*DAYS360(${startRef},${endRef})/360`);
+      }
+      setCell(ws, `K${xr}`, 0, { f: terms.join('+'), z: FMT.ACCOUNTING });
+    }
   });
 
   const lastDataRow = rows.length + 1;        // 1-indexed

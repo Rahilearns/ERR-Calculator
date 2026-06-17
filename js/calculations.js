@@ -483,6 +483,17 @@ export function addMonthsDue(d, m) {
   return x;
 }
 
+// Excel DAYS360 (US/NASD method): months are 30 days, years 360. Used for the day-count split
+// of the Loan Security Benefit when a security amount is taken on a non-installment date.
+export function days360(startISO, endISO) {
+  const [sy, sm, sdRaw] = String(startISO).split('-').map(Number);
+  const [ey, em, edRaw] = String(endISO).split('-').map(Number);
+  let sd = sdRaw, ed = edRaw;
+  if (sd === 31) sd = 30;
+  if (ed === 31 && sd === 30) ed = 30;
+  return (ey - sy) * 360 + (em - sm) * 30 + (ed - sd);
+}
+
 export function buildRateRevisionStructured(p) {
   const {
     initialLoanAmount,
@@ -699,6 +710,32 @@ export function buildRateRevisionStructured(p) {
   // Loan Security Balance is released at maturity: show 0 on the final payment row.
   if (rows.length > 1) rows[rows.length - 1].securityAmount = 0;
 
+  // Loan Security Benefit per row (one-month lag): row N's benefit uses row N-1's COF and the
+  // security state across [date(N-1), date(N)]. A security amount TAKEN mid-period (its fromDate
+  // strictly inside that window — i.e. on a non-installment day) splits the month by day-count
+  // (DAYS360): each segment accrues on its own cumulative balance and weighted-average rate,
+  // both against the period-start COF. Clean (on-installment) dates keep the flat /12 accrual.
+  if (rows.length) rows[0].securityBenefit = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const d0 = rows[i - 1].date, d1 = rows[i].date, cof = rows[i - 1].cof || 0;
+    const cuts = securityLayers
+      .filter(l => l.fromDate && l.fromDate > d0 && l.fromDate < d1)
+      .map(l => l.fromDate)
+      .sort();
+    if (!cuts.length) {
+      const s = getSecurityOn(d0);
+      rows[i].securityBenefit = s.amount * (cof - s.rate) / 12;
+    } else {
+      const bounds = [d0, ...cuts, d1];
+      let ben = 0;
+      for (let k = 0; k < bounds.length - 1; k++) {
+        const s = getSecurityOn(bounds[k]);
+        ben += s.amount * (cof - s.rate) * days360(bounds[k], bounds[k + 1]) / 360;
+      }
+      rows[i].securityBenefit = ben;
+    }
+  }
+
   // Int. Expense at month N = URPA(N-1) * COF(N-1) / 12 — the PREVIOUS month's URPA and
   // COF (the COF prevailing at the start of the accrual month), per the rectified file.
   applyIntExpenseAccrual(rows, 0, (i) => (rows[i - 1].cof || 0) / 12);
@@ -734,13 +771,15 @@ export function computeRevisionMetrics(schedule) {
   const totalMonths = rows.length - 1;
   const tenorYears = totalMonths / 12;
 
-  // Loan Security Benefit accrues on the prior month's balance: the benefit realized at row N
-  // uses row (N-1)'s security balance and COF (one-month lag, like interest expense). The
-  // disbursement row carries none; the final row's released balance naturally drops out.
+  // Loan Security Benefit is precomputed per row by buildRateRevisionStructured (one-month lag,
+  // with a day-count split for mid-period security additions). Sum it; fall back to the flat
+  // prior-month accrual for any row lacking the precomputed value.
   let csBenefit = 0;
   for (let i = 1; i < rows.length; i++) {
-    const p = rows[i - 1];
-    csBenefit += ((p.cof || 0) - (p.securityRate || 0)) * (p.securityAmount || 0) / 12;
+    const r = rows[i];
+    csBenefit += r.securityBenefit != null
+      ? r.securityBenefit
+      : ((rows[i - 1].cof || 0) - (rows[i - 1].securityRate || 0)) * (rows[i - 1].securityAmount || 0) / 12;
   }
   const nii = totalInterest + csBenefit - totalInterestExpense;
   const nim = avgPortfolio > 0 && tenorYears > 0 ? (nii / avgPortfolio) / tenorYears : 0;
