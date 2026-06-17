@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField, textField,
   monthBoxesField, layeredField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzg';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzg';
+} from './components.js?v=20260603zzh';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzh';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzg';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzg';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzg';
+} from './calculations.js?v=20260603zzh';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzh';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzh';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzg';
+} from './excel.js?v=20260603zzh';
 
 // The new (incremental) loan-security model: each row is an amount taken on a date at a rate.
 const SECURITY_LAYERS_HELP = 'Add each security amount as you take it from the client (incremental), with its date and rate. The system accumulates the balance and computes the amount-weighted average rate across the active layers.';
