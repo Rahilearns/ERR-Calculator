@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzh';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzi';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -608,8 +608,9 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const lendCell = (d) => `${LAYER}!$E$${3 + Math.max(0, lastIdxLE(rateLayers, 'fromDate', d))}`;     // active lending rate on date d
   const cofCell = (d) => `${LAYER}!$W$${3 + Math.max(0, lastIdxLE(cofRecs, 'date', d))}`;               // Eligible COF on date d
   const secActive = (d) => securityLayers.filter(l => l.fromDate <= d).length;                          // # security layers active by d
-  const secAmtCell = (d) => { const n = secActive(d); return n ? `${LAYER}!$M$${3 + n - 1}` : null; };  // cumulative amount on date d
-  const secRateCell = (d) => { const n = secActive(d); return n ? `${LAYER}!$N$${3 + n - 1}` : null; }; // weighted-avg rate on date d
+  // Most recent active layer wins: its own Amount ($K) is the balance, its Active Rate ($L) the rate.
+  const secAmtCell = (d) => { const n = secActive(d); return n ? `${LAYER}!$K$${3 + n - 1}` : null; };
+  const secRateCell = (d) => { const n = secActive(d); return n ? `${LAYER}!$L$${3 + n - 1}` : null; };
 
   // ----- Schedule sheet -----
   const heads = ['Sl.', 'Date', 'Installment', 'Interest', 'Principal', 'URPA',
@@ -938,10 +939,10 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
     });
   }
 
-  // Table 2 — Loan Security Layers (G:O). Cumulative amount = running SUM; Weighted Average =
-  // amount-weighted mean of the active layers' rates (SUMPRODUCT/SUM) up to and including each row.
+  // Table 2 — Loan Security Layers (G:M). The most recent active layer wins: its Amount is the
+  // balance in effect (a total, not an increment) and its Active Rate is the rate in effect.
   title('G1', 'Loan Security Layers');
-  ['Year', 'Month', 'Day', 'From Date', 'Amount', 'Active Rate', 'Cumulative Amount', 'Weighted Average of the Active Rates', 'Security Identifier']
+  ['Year', 'Month', 'Day', 'From Date', 'Amount', 'Active Rate', 'Security Identifier']
     .forEach((h, c) => head(XLSX.utils.encode_cell({ r: 1, c: 6 + c }), h));
   securityLayers.forEach((l, i) => {
     const r = 3 + i; const [y, m, d] = ymd(l.fromDate);
@@ -949,9 +950,7 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
     dateCell(`J${r}`, `DATE(G${r},H${r},I${r})`);
     numCell(`K${r}`, l.amount || 0);
     pctCell(`L${r}`, l.activeRate || 0);
-    fNum(`M${r}`, `SUM($K$3:$K${r})`, RR_FMT.NUM2);
-    fNum(`N${r}`, `SUMPRODUCT($K$3:$K${r},$L$3:$L${r})/SUM($K$3:$K${r})`, RR_FMT.PCT2);
-    setCell(wsL, `O${r}`, `Loan Security ${i + 1}`, { text: true, s: RR_STYLE.cell });
+    setCell(wsL, `M${r}`, `Loan Security ${i + 1}`, { text: true, s: RR_STYLE.cell });
   });
 
   // Table 3 — COF + ISC Layers (Q:W). Eligible COF = MAX(COF, ISC) + 0.3%.
@@ -972,10 +971,10 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
   const maxRows = Math.max(rateLayers.length, securityLayers.length, cofRecs.length, 1);
   wsL['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRows + 1, c: 22 } });
   const W = (n) => ({ wch: n });
-  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(13), W(13), W(15), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10)];
+  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(15), W(3), W(3), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10)];
   wsL['!rows'] = []; wsL['!rows'][0] = { hpt: 21.75 }; wsL['!rows'][1] = { hpt: 28 };
   wsL['!merges'] = [
-    { s: { r: 0, c: 6 }, e: { r: 0, c: 14 } },   // G1:O1 (Loan Security)
+    { s: { r: 0, c: 6 }, e: { r: 0, c: 12 } },   // G1:M1 (Loan Security)
     { s: { r: 0, c: 16 }, e: { r: 0, c: 22 } },  // Q1:W1 (COF + ISC)
   ];
   if (includeLending) wsL['!merges'].unshift({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }); // A1:E1 (Lending Rate)

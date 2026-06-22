@@ -503,8 +503,8 @@ select.centered-input { text-align: center; text-align-last: center; }
    mode), with saturated solid Paid (green) and Capitalized (purple) on white text. */
 :root {
   --mb-accrue-bg: #eaf2ff; --mb-accrue-bd: #c9dcf7; --mb-accrue-text: #1a1a1a;
-  --mb-paid-bg:   #37bc7d; --mb-paid-bd:   #2c9c67;
-  --mb-cap-bg:    #9b51e0; --mb-cap-bd:    #7e39c4;
+  --mb-paid-bg:   #3a25f8; --mb-paid-bd:   #2e1ec6;
+  --mb-cap-bg:    #9223fb; --mb-cap-bd:    #751cc9;
   --mb-text: #ffffff;
 }
 [data-theme="dark"] {

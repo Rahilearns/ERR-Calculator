@@ -3,25 +3,26 @@ import {
   el, numberField, percentField, optionField, dateField, textField,
   monthBoxesField, layeredField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzh';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzh';
+} from './components.js?v=20260603zzi';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzi';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzh';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzh';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzh';
+} from './calculations.js?v=20260603zzi';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzi';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzi';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzh';
+} from './excel.js?v=20260603zzi';
 
-// The new (incremental) loan-security model: each row is an amount taken on a date at a rate.
-const SECURITY_LAYERS_HELP = 'Add each security amount as you take it from the client (incremental), with its date and rate. The system accumulates the balance and computes the amount-weighted average rate across the active layers.';
+// Loan-security model: each row is the security balance in effect from its date, at its rate
+// (a total — not an addition). The most recent layer applies until the next layer's date.
+const SECURITY_LAYERS_HELP = 'Each row is the loan security balance in effect from its date, at its rate — a total, not an addition. The most recent layer applies until the next layer starts.';
 
 // Cached page state by tab key (also persisted via storage saveDraft)
 const tabState = {};

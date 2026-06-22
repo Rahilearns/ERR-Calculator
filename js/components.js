@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzh';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzi';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -300,9 +300,9 @@ export function monthBoxesField({ name, getCount, tooltip = '', label = '', sele
   const setAll = (v) => { states = states.map(() => Math.min(v, maxState)); render(); };
   const bulkBtns = {};
   if (selectAll && capitalizable) {
-    bulkBtns[0] = el('button', { type: 'button', class: 'mb-all mb-all-accrue', onclick: () => setAll(0) }, 'All Accrued');
-    bulkBtns[1] = el('button', { type: 'button', class: 'mb-all mb-all-paid', onclick: () => setAll(1) }, 'All Paid');
-    bulkBtns[2] = el('button', { type: 'button', class: 'mb-all mb-all-cap', onclick: () => setAll(2) }, 'All Capitalized');
+    bulkBtns[0] = el('button', { type: 'button', class: 'mb-all mb-all-accrue', onclick: () => setAll(0) }, 'All to be Accrued');
+    bulkBtns[1] = el('button', { type: 'button', class: 'mb-all mb-all-paid', onclick: () => setAll(1) }, 'All to be Paid');
+    bulkBtns[2] = el('button', { type: 'button', class: 'mb-all mb-all-cap', onclick: () => setAll(2) }, 'All to be Capitalized');
     wrapper.appendChild(el('div', { class: 'mora-bulk' }, bulkBtns[0], bulkBtns[1], bulkBtns[2]));
   }
 

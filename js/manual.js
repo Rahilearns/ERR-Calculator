@@ -1,25 +1,25 @@
 // Per-module user guide — opened from the info button in the header. Plain, simple language
 // (explained as if to a 10-year-old). Sections are collapsed by default; click to expand.
-import { el, openModal, closeModal } from './components.js?v=20260603zzh';
+import { el, openModal, closeModal } from './components.js?v=20260603zzi';
 
 // ---- Shared sections reused across modules ----
 const IDP_SECTION = {
   h: 'Interest During Moratorium Period',
   p: 'Even during the rest period, interest keeps growing. For each month, click the box to tell the system what to do with that month’s interest. Click again to change it.',
   bullets: [
-    'Blue = Accrued: the interest waits and is collected at the next paying month.',
-    'Green = Paid: the borrower pays that month’s interest right away.',
+    'Light blue = Accrued: the interest waits and is collected at the next paying month.',
+    'Indigo = Paid: the borrower pays that month’s interest right away.',
     'Purple = Capitalized: the interest is added on top of the loan, so later interest grows on it too.',
-    'Use the three buttons on the right to set every month at once.',
+    'Use the three buttons on the right (“All to be …”) to set every month at once.',
   ],
 };
 const SECURITY_LAYERS_SECTION = {
   h: 'Loan Security Layers',
-  p: 'This is money the borrower keeps parked with the bank as safety. Add each amount as you take it — the date, how much, and its rate. You type only the new amount each time, not a running total.',
+  p: 'This is money the borrower keeps parked with the bank as safety. Each row is the security balance in effect from its date, at its rate.',
   bullets: [
-    'The system adds the amounts up (cumulative balance) and works out the average rate across them.',
+    'Type the full balance for that date (a total, not an addition). The most recent row applies until the next row’s date.',
     'The bank earns the gap between the cost of fund and the security’s rate — this is the Loan Security Benefit.',
-    'If money is taken on a day that is not a payment day, the system splits that month by the exact number of days, so the benefit is correct.',
+    'If the balance changes on a day that is not a payment day, the system splits that month by the exact number of days, so the benefit is correct.',
   ],
 };
 const REFERENCE_SECTION = {

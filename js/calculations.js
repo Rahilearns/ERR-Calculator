@@ -564,19 +564,18 @@ export function buildRateRevisionStructured(p) {
     return { interest, segments };
   }
 
-  // Loan security effective on a date: each layer is the INCREMENTAL amount taken on its
-  // fromDate at its rate. The balance = cumulative sum of all layers active by that date;
-  // the rate = amount-weighted average of those active layers' rates. Not lagged.
+  // Loan security effective on a date: the most recent layer whose From <= date wins — its
+  // Amount is the security balance in effect (a total, not an increment) and its rate is the
+  // rate in effect, until the next layer's From. No cumulative sum, no weighted average.
   function getSecurityOn(dateStr) {
     if (!securityLayers || !securityLayers.length) return { amount: 0, rate: 0 };
-    let cum = 0, weighted = 0;
+    let result = { amount: 0, rate: 0 }, bestFrom = null;
     for (const r of securityLayers) {
-      if (r.fromDate && r.fromDate <= dateStr) {
-        const a = r.amount || 0;
-        cum += a; weighted += a * (r.activeRate || 0);
+      if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
+        bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
       }
     }
-    return { amount: cum, rate: cum > 0 ? weighted / cum : 0 };
+    return result;
   }
 
   const rows = [];
@@ -830,15 +829,14 @@ export function computeRevisionCustomizedMetrics(uploadedRows, { securityLayers 
       return result;
     };
     const getSecOn = (dateStr) => {
-      // Incremental layers: balance = cumulative amount active by the date; rate = amount-
-      // weighted average of those active layers' rates.
-      let cum = 0, weighted = 0;
+      // Most recent security layer whose From <= date wins — its Amount (the balance in effect)
+      // and its rate, until the next layer's From. No cumulative sum, no weighted average.
+      let result = { amount: 0, rate: 0 }, bestFrom = null;
       for (const r of (securityLayers || []))
-        if (r.fromDate && r.fromDate <= dateStr) {
-          const a = r.amount || 0;
-          cum += a; weighted += a * (r.activeRate || 0);
+        if (r.fromDate && r.fromDate <= dateStr && (bestFrom === null || r.fromDate >= bestFrom)) {
+          bestFrom = r.fromDate; result = { amount: r.amount || 0, rate: r.activeRate || 0 };
         }
-      return { amount: cum, rate: cum > 0 ? weighted / cum : 0 };
+      return result;
     };
     for (let i = 1; i < rows.length; i++) {
       const prev = rows[i - 1];
