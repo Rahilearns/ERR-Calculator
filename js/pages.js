@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField, textField,
   monthBoxesField, layeredField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzj';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzj';
+} from './components.js?v=20260603zzk';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzk';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzj';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzj';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzj';
+} from './calculations.js?v=20260603zzk';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzk';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzk';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzj';
+} from './excel.js?v=20260603zzk';
 
 // Loan-security model: each row is the security balance in effect from its date, at its rate
 // (a total — not an addition). The most recent layer applies until the next layer's date.

@@ -910,74 +910,56 @@ tr.totals-row td {
   margin-top: 12px;
 }
 
-/* ===== Windows-11-style calendar (flatpickr) ===== */
+/* ===== Custom Windows-11-style date picker ===== */
 :root { --cal-accent: #e8830c; }
-.flatpickr-calendar {
-  font-size: 12px;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-strong);
-  background: var(--bg-elev);
-  color: var(--text);
-  padding: 4px 4px 2px;
+.dp-cal {
+  position: absolute; z-index: 200; width: 286px;
+  background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); border-radius: 11px;
+  box-shadow: var(--shadow-strong); padding: 6px 8px 8px;
+  font-size: 13px; user-select: none;
 }
-.flatpickr-calendar.arrowTop:before, .flatpickr-calendar.arrowTop:after,
-.flatpickr-calendar.arrowBottom:before, .flatpickr-calendar.arrowBottom:after { display: none; }
-
-/* Header: month + year on the LEFT, up/down nav on the RIGHT */
-.flatpickr-months { display: flex; align-items: center; padding: 8px 8px 4px; }
-.flatpickr-months .flatpickr-month { order: 1; flex: 1 1 auto; height: auto; color: var(--text); }
-.flatpickr-current-month {
-  position: static; left: 0; width: auto; height: auto; padding: 0;
-  display: flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 600;
+/* Header: title (month/year/decade) on the left, up/down nav on the right */
+.dp-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 6px; }
+.dp-title {
+  background: none; border: none; color: var(--text); font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; padding: 5px 8px; border-radius: 6px;
 }
-.flatpickr-current-month .flatpickr-monthDropdown-months {
-  font-size: 15px; font-weight: 600; padding: 2px; appearance: none;
-  background: transparent; color: var(--text); border-radius: 5px;
+.dp-title:hover:not(:disabled) { background: var(--primary-soft); }
+.dp-title:disabled { cursor: default; }
+.dp-navs { display: flex; gap: 2px; }
+.dp-nav {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--text-soft); cursor: pointer; border-radius: 6px;
 }
-.flatpickr-current-month .flatpickr-monthDropdown-months:hover { background: var(--primary-soft); }
-.flatpickr-current-month .flatpickr-monthDropdown-months option { background: var(--bg-elev); color: var(--text); }
-.flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
-  position: static !important; order: 2; width: 30px; height: 30px; padding: 0;
-  display: flex; align-items: center; justify-content: center; border-radius: 6px;
+.dp-nav:hover { background: var(--primary-soft); color: var(--primary); }
+/* Weekday row */
+.dp-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); }
+.dp-wd { text-align: center; color: var(--text-soft); font-size: 11px; font-weight: 600; padding: 4px 0; }
+/* Grids + cells */
+.dp-grid { display: grid; gap: 2px; }
+.dp-days { grid-template-columns: repeat(7, 1fr); }
+.dp-my { grid-template-columns: repeat(4, 1fr); }
+.dp-cell {
+  aspect-ratio: 1 / 1; border-radius: 50%;
+  background: none; border: 1.5px solid transparent; color: var(--text);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
-.flatpickr-months .flatpickr-next-month { order: 3; }
-.flatpickr-months .flatpickr-prev-month:hover, .flatpickr-months .flatpickr-next-month:hover { background: var(--primary-soft); }
-.flatpickr-months .flatpickr-prev-month svg, .flatpickr-months .flatpickr-next-month svg {
-  width: 9px; height: 9px; transform: rotate(90deg); fill: var(--text);
-}
-.flatpickr-months .flatpickr-prev-month:hover svg, .flatpickr-months .flatpickr-next-month:hover svg { fill: var(--primary); }
-
-/* Weekday header (two-letter, muted) */
-.flatpickr-weekday { color: var(--text-soft); font-weight: 600; font-size: 11px; }
-
-/* Days — circular; selected = orange fill, today = orange ring */
-.flatpickr-day { color: var(--text); border-radius: 50%; }
-.flatpickr-day:hover { background: var(--primary-soft); border-color: transparent; color: var(--text); }
-.flatpickr-day.today { border: 1.5px solid var(--cal-accent); }
-.flatpickr-day.selected, .flatpickr-day.selected:hover,
-.flatpickr-day.today.selected, .flatpickr-day.startRange, .flatpickr-day.endRange {
-  background: var(--cal-accent); border-color: var(--cal-accent); color: #fff; font-weight: 600;
-}
-.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay,
-.flatpickr-day.flatpickr-disabled, .flatpickr-day.flatpickr-disabled:hover { color: var(--text-mute); }
-
-/* Year dropdown — kept for quick navigation, blends into the header */
-.fp-year-select {
-  background: transparent; border: none; color: var(--text);
-  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 2px; appearance: none; border-radius: 5px;
-}
-.fp-year-select:hover { background: var(--primary-soft); }
-.fp-year-select option { background: var(--bg-elev); color: var(--text); }
-
+.dp-my .dp-cell { font-size: 13px; }
+.dp-cell:hover:not(:disabled):not(.dp-selected) { background: var(--primary-soft); }
+.dp-today { border-color: var(--cal-accent); }
+.dp-selected { background: var(--cal-accent); border-color: var(--cal-accent); color: #fff; font-weight: 600; }
+.dp-other { color: var(--text-mute); }
+.dp-disabled { color: var(--text-mute); cursor: default; opacity: 0.45; }
 /* Today footer button */
-.fp-today-btn {
-  display: block; width: calc(100% - 12px); margin: 2px 6px 6px;
-  padding: 7px; border: 1px solid var(--border); border-radius: 7px;
-  background: var(--bg); color: var(--primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+.dp-todaybtn {
+  display: block; width: 100%; margin-top: 7px; padding: 8px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
   transition: background 0.12s ease;
 }
-.fp-today-btn:hover { background: var(--primary-soft); }
+.dp-todaybtn:hover { background: var(--primary-soft); }
 
 /* Tables */
 table.schedule {

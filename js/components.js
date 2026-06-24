@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzj';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzk';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -192,7 +192,165 @@ export function optionField({ label, name, options, value = null, onChange = nul
   return wrapper;
 }
 
-// Date field — flatpickr, DD-Mmm-YYYY, Year dropdown
+// ============================================================
+// Windows-11-style date picker (custom, replaces flatpickr). Three drill-down views:
+//   days  — click the "Month Year" title → months
+//   months — click the "Year" title → years
+//   years  — a decade grid
+// The up/down arrows page the current view (month / year / decade). A "Today" footer button
+// selects today. Value lives on the input as DD-Mmm-YYYY; the popup mounts on <body>.
+// ============================================================
+const DP_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DP_MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DP_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const DP_CHEVRON_UP = '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M3.5 10 8 5.5 12.5 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const DP_CHEVRON_DOWN = '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function attachDatePicker(input, { onChange = null, disable = null } = {}) {
+  let pop = null, view = 'days', viewYear, viewMonth, selected = null;
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const isDisabled = (d) => typeof disable === 'function' && !!disable(d);
+  const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const fireChange = () => { if (onChange) onChange(input.value); };
+
+  function syncFromInput() {
+    const d = parseDDMMMYYYY(input.value);
+    const ok = d && !isNaN(d);
+    selected = ok ? startOfDay(d) : null;
+    const base = ok ? d : new Date();
+    viewYear = base.getFullYear(); viewMonth = base.getMonth();
+  }
+  function commit(date) { selected = date; input.value = formatDDMMMYYYY(date); fireChange(); close(); }
+
+  function open() {
+    if (pop) return;
+    syncFromInput(); view = 'days';
+    pop = el('div', { class: 'dp-cal' });
+    document.body.appendChild(pop);
+    render();
+    requestAnimationFrame(() => {
+      document.addEventListener('mousedown', onDocDown, true);
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('resize', position);
+      window.addEventListener('scroll', position, true);
+    });
+  }
+  function close() {
+    if (!pop) return;
+    pop.remove(); pop = null;
+    document.removeEventListener('mousedown', onDocDown, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', position);
+    window.removeEventListener('scroll', position, true);
+  }
+  function onDocDown(e) { if (pop && !pop.contains(e.target) && e.target !== input) close(); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+
+  function position() {
+    if (!pop) return;
+    const r = input.getBoundingClientRect();
+    const ph = pop.offsetHeight || 320;
+    const above = r.top - ph - 4, below = r.bottom + 4;
+    pop.style.left = (window.scrollX + r.left) + 'px';
+    pop.style.top = (window.scrollY + ((r.bottom + ph + 8 > window.innerHeight && above > 4) ? above : below)) + 'px';
+  }
+
+  function navStep(dir) {
+    if (view === 'days') { viewMonth += dir; if (viewMonth < 0) { viewMonth = 11; viewYear--; } else if (viewMonth > 11) { viewMonth = 0; viewYear++; } }
+    else if (view === 'months') viewYear += dir;
+    else viewYear += dir * 10;
+    render();
+  }
+  function headerEl(titleText, onTitleClick) {
+    const title = el('button', { class: 'dp-title', type: 'button' }, titleText);
+    if (onTitleClick) title.addEventListener('click', onTitleClick); else title.disabled = true;
+    const up = el('button', { class: 'dp-nav', type: 'button', 'aria-label': 'Previous', html: DP_CHEVRON_UP });
+    const down = el('button', { class: 'dp-nav', type: 'button', 'aria-label': 'Next', html: DP_CHEVRON_DOWN });
+    up.addEventListener('click', () => navStep(-1));
+    down.addEventListener('click', () => navStep(1));
+    return el('div', { class: 'dp-head' }, title, el('div', { class: 'dp-navs' }, up, down));
+  }
+
+  function render() {
+    if (!pop) return;
+    pop.innerHTML = '';
+    if (view === 'days') renderDays();
+    else if (view === 'months') renderMonths();
+    else renderYears();
+    const tbtn = el('button', { class: 'dp-todaybtn', type: 'button' }, 'Today');
+    tbtn.addEventListener('click', () => {
+      const t = startOfDay(new Date());
+      if (isDisabled(t)) { viewYear = t.getFullYear(); viewMonth = t.getMonth(); view = 'days'; render(); }
+      else commit(t);
+    });
+    pop.appendChild(tbtn);
+    position();
+  }
+  function renderDays() {
+    pop.appendChild(headerEl(`${DP_MONTHS_FULL[viewMonth]} ${viewYear}`, () => { view = 'months'; render(); }));
+    pop.appendChild(el('div', { class: 'dp-weekdays' }, ...DP_WEEKDAYS.map(w => el('div', { class: 'dp-wd' }, w))));
+    const grid = el('div', { class: 'dp-grid dp-days' });
+    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    const t = startOfDay(new Date());
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(viewYear, viewMonth, 1 - firstDow + i);
+      const cls = ['dp-cell', 'dp-day'];
+      if (d.getMonth() !== viewMonth) cls.push('dp-other');
+      if (sameDay(d, selected)) cls.push('dp-selected');
+      else if (sameDay(d, t)) cls.push('dp-today');
+      const dis = isDisabled(d);
+      if (dis) cls.push('dp-disabled');
+      const cell = el('button', { class: cls.join(' '), type: 'button' }, String(d.getDate()));
+      if (dis) cell.disabled = true; else cell.addEventListener('click', () => commit(startOfDay(d)));
+      grid.appendChild(cell);
+    }
+    pop.appendChild(grid);
+  }
+  function renderMonths() {
+    pop.appendChild(headerEl(`${viewYear}`, () => { view = 'years'; render(); }));
+    const grid = el('div', { class: 'dp-grid dp-my' });
+    const now = new Date();
+    for (let m = 0; m < 12; m++) {
+      const cls = ['dp-cell'];
+      if (selected && selected.getFullYear() === viewYear && selected.getMonth() === m) cls.push('dp-selected');
+      else if (now.getFullYear() === viewYear && now.getMonth() === m) cls.push('dp-today');
+      const cell = el('button', { class: cls.join(' '), type: 'button' }, DP_MONTHS_ABBR[m]);
+      cell.addEventListener('click', () => { viewMonth = m; view = 'days'; render(); });
+      grid.appendChild(cell);
+    }
+    pop.appendChild(grid);
+  }
+  function renderYears() {
+    const decadeStart = Math.floor(viewYear / 10) * 10;
+    pop.appendChild(headerEl(`${decadeStart} - ${decadeStart + 9}`, null));
+    const grid = el('div', { class: 'dp-grid dp-my' });
+    const now = new Date();
+    for (let i = -2; i <= 13; i++) {
+      const y = decadeStart + i;
+      const cls = ['dp-cell'];
+      if (y < decadeStart || y > decadeStart + 9) cls.push('dp-other');
+      if (selected && selected.getFullYear() === y) cls.push('dp-selected');
+      else if (now.getFullYear() === y) cls.push('dp-today');
+      const cell = el('button', { class: cls.join(' '), type: 'button' }, String(y));
+      cell.addEventListener('click', () => { viewYear = y; view = 'months'; render(); });
+      grid.appendChild(cell);
+    }
+    pop.appendChild(grid);
+  }
+
+  input.addEventListener('focus', open);
+  input.addEventListener('mousedown', () => { if (document.activeElement === input) open(); });
+  // Typed entry → reformat + notify (mirrors the previous allowInput behaviour).
+  input.addEventListener('change', () => {
+    const d = parseDDMMMYYYY(input.value);
+    if (d && !isNaN(d)) { input.value = formatDDMMMYYYY(d); fireChange(); }
+    else if (input.value.trim() === '') fireChange();
+  });
+
+  return { open, close };
+}
+
+// Date field — custom Windows-11 picker, DD-Mmm-YYYY
 export function dateField({ label, name, placeholder = 'dd-Mmm-yyyy', tooltip = '', onChange = null, disableFn = null }) {
   const id = nextId();
   const input = el('input', { id, type: 'text', 'data-name': name, placeholder, autocomplete: 'off', class: 'centered-input date-input' });
@@ -200,21 +358,7 @@ export function dateField({ label, name, placeholder = 'dd-Mmm-yyyy', tooltip = 
   field.appendChild(labelWithTooltip(id, label, tooltip));
   field.appendChild(input);
 
-  let fp;
-  requestAnimationFrame(() => {
-    if (typeof flatpickr === 'undefined') return;
-    fp = flatpickr(input, {
-      dateFormat: 'd-M-Y',
-      allowInput: true,
-      locale: { weekdays: FP_WEEKDAYS },
-      disable: disableFn ? [disableFn] : [],
-      onChange: () => { if (onChange) onChange(input.value); },
-      onReady: fpOnReady,
-      onMonthChange: applyYearDropdown,
-      onYearChange: applyYearDropdown,
-    });
-    field._fp = fp;
-  });
+  attachDatePicker(input, { onChange: () => { if (onChange) onChange(input.value); }, disable: disableFn });
 
   field.getValue = () => {
     if (!input.value) return null;
@@ -222,10 +366,9 @@ export function dateField({ label, name, placeholder = 'dd-Mmm-yyyy', tooltip = 
     return d ? d.toISOString().slice(0, 10) : null;
   };
   field.setValue = (v) => {
-    if (!v) { input.value = ''; if (fp) fp.clear(); return; }
-    const dateObj = isoToLocalDate(v);
-    if (fp) fp.setDate(dateObj, false);
-    else input.value = formatDDMMMYYYY(dateObj);
+    // Programmatic set — write the input directly (the picker reads it on open); no onChange.
+    if (!v) { input.value = ''; return; }
+    input.value = formatDDMMMYYYY(isoToLocalDate(v));
   };
   field.input = input;
   return field;
@@ -238,58 +381,6 @@ export function isoToLocalDate(iso) {
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) { const d = new Date(iso); return isNaN(d) ? null : d; }
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-}
-
-// Pre-built year <option> HTML — built once, cloned per flatpickr instance.
-const YEAR_OPTIONS_HTML = (() => {
-  const now = new Date().getFullYear();
-  let html = '';
-  for (let y = now - 100; y <= now + 100; y++) html += `<option value="${y}">${y}</option>`;
-  return html;
-})();
-
-// Convert flatpickr's year input into a styled select dropdown.
-function applyYearDropdown(selectedDates, dateStr, instance) {
-  const yearWrap = instance.calendarContainer.querySelector('.numInputWrapper');
-  if (!yearWrap || yearWrap.dataset.dropdownized) return;
-  yearWrap.dataset.dropdownized = '1';
-  const input = yearWrap.querySelector('.cur-year');
-  const sel = document.createElement('select');
-  sel.className = 'fp-year-select';
-  sel.innerHTML = YEAR_OPTIONS_HTML;
-  sel.value = input.value;
-  sel.addEventListener('change', () => instance.changeYear(Number(sel.value)));
-  yearWrap.insertBefore(sel, input);
-  input.style.display = 'none';
-  yearWrap.querySelectorAll('.arrowUp, .arrowDown').forEach(a => a.style.display = 'none');
-}
-
-// Windows-11-style weekday headers (two letters).
-const FP_WEEKDAYS = {
-  shorthand: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
-  longhand: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-};
-
-// Append a "Today" footer button to the calendar — selects today (skips disabled days) and closes.
-function addTodayButton(instance) {
-  if (instance.calendarContainer.querySelector('.fp-today-btn')) return;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'fp-today-btn';
-  btn.textContent = 'Today';
-  btn.addEventListener('click', () => {
-    const today = new Date();
-    const blocked = (instance.config.disable || []).some(fn => typeof fn === 'function' && fn(today));
-    if (blocked) instance.jumpToDate(today);      // can't select a disabled day — just navigate to it
-    else { instance.setDate(today, true); instance.close(); }
-  });
-  instance.calendarContainer.appendChild(btn);
-}
-
-// Combined onReady: year dropdown + Today button.
-function fpOnReady(selectedDates, dateStr, instance) {
-  applyYearDropdown(selectedDates, dateStr, instance);
-  addTodayButton(instance);
 }
 
 export function parseDDMMMYYYY(s) {
@@ -461,19 +552,7 @@ export function layeredField(opts) {
     } else if (s.type === 'date') {
       inp = el('input', { type: 'text', placeholder: 'dd-Mmm-yyyy', class: 'centered-input date-input' });
       if (values[s.key]) inp.value = values[s.key];
-      requestAnimationFrame(() => {
-        if (typeof flatpickr === 'undefined') return;
-        flatpickr(inp, {
-          dateFormat: 'd-M-Y',
-          allowInput: true,
-          locale: { weekdays: FP_WEEKDAYS },
-          onChange: () => { inp.dataset.userSet = '1'; fireChange(); },
-          onReady: fpOnReady,
-          onMonthChange: applyYearDropdown,
-          onYearChange: applyYearDropdown,
-        });
-      });
-      inp.addEventListener('change', () => { inp.dataset.userSet = '1'; fireChange(); });
+      attachDatePicker(inp, { onChange: () => { inp.dataset.userSet = '1'; fireChange(); } });
     } else if (s.type === 'percent') {
       const pwrap = el('div', { class: 'percent-input-fixed inline' });
       inp = el('input', { type: 'text', inputmode: 'decimal', class: 'numeric-input' });
@@ -560,14 +639,10 @@ export function layeredField(opts) {
   function setVal(inp, v, kind) {
     if (!inp) return;
     if (kind === 'date') {
-      // clear(false) / setDate(date, false): the `false` suppresses flatpickr's onChange so
-      // programmatic updates don't get mistaken for user edits (which would set userSet).
-      if (!v) { if (inp._flatpickr) inp._flatpickr.clear(false); else inp.value = ''; return; }
-      // v is an ISO 'YYYY-MM-DD' string. flatpickr is configured with dateFormat 'd-M-Y',
-      // so passing the ISO string would be mis-parsed — pass a real Date (local midnight).
-      const dateObj = isoToLocalDate(v);
-      if (inp._flatpickr) inp._flatpickr.setDate(dateObj, false);
-      else inp.value = formatDDMMMYYYY(dateObj);
+      // Programmatic set — write the input directly (the picker reads it on open). Setting the
+      // value never fires a user 'change', so userSet stays clear (not mistaken for a user edit).
+      if (!v) { inp.value = ''; return; }
+      inp.value = formatDDMMMYYYY(isoToLocalDate(v));
     } else {
       inp.value = (v === null || v === undefined) ? '' : String(v);
     }
