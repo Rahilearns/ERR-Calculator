@@ -542,8 +542,8 @@ export function buildRateRevisionStructured(p) {
   // If no rate layer takes effect strictly inside the period, the nominal convention
   // applies: balance * rate-at-period-start / nominalDivisor (12 monthly, 4 quarterly).
   // If a revision's From Date falls inside the period (a non-due date), the period is
-  // split into day-count segments: balance * rate_i * days_i / 360 per segment — the
-  // fractional-interest treatment from the rectified file.
+  // split into day-count segments: balance * rate_i * DAYS360(segStart,segEnd) / 360 per
+  // segment — the fractional-interest treatment from the rectified file (Excel DAYS360 basis).
   function periodInterest(balance, startISO, endISO, nominalDivisor) {
     const cuts = [...new Set((rateLayers || [])
       .map(l => l.fromDate)
@@ -556,7 +556,7 @@ export function buildRateRevisionStructured(p) {
     let interest = 0;
     for (let i = 0; i < bounds.length - 1; i++) {
       const segStart = bounds[i], segEnd = bounds[i + 1];
-      const days = Math.round((new Date(segEnd) - new Date(segStart)) / 86400000);
+      const days = days360(segStart, segEnd);
       const rate = getRateOn(segStart);
       interest += balance * rate / 360 * days;
       segments.push({ rate, from: segStart, to: segEnd, days });

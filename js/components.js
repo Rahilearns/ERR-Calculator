@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzi';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzj';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -206,9 +206,10 @@ export function dateField({ label, name, placeholder = 'dd-Mmm-yyyy', tooltip = 
     fp = flatpickr(input, {
       dateFormat: 'd-M-Y',
       allowInput: true,
+      locale: { weekdays: FP_WEEKDAYS },
       disable: disableFn ? [disableFn] : [],
       onChange: () => { if (onChange) onChange(input.value); },
-      onReady: applyYearDropdown,
+      onReady: fpOnReady,
       onMonthChange: applyYearDropdown,
       onYearChange: applyYearDropdown,
     });
@@ -261,6 +262,34 @@ function applyYearDropdown(selectedDates, dateStr, instance) {
   yearWrap.insertBefore(sel, input);
   input.style.display = 'none';
   yearWrap.querySelectorAll('.arrowUp, .arrowDown').forEach(a => a.style.display = 'none');
+}
+
+// Windows-11-style weekday headers (two letters).
+const FP_WEEKDAYS = {
+  shorthand: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+  longhand: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+};
+
+// Append a "Today" footer button to the calendar — selects today (skips disabled days) and closes.
+function addTodayButton(instance) {
+  if (instance.calendarContainer.querySelector('.fp-today-btn')) return;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'fp-today-btn';
+  btn.textContent = 'Today';
+  btn.addEventListener('click', () => {
+    const today = new Date();
+    const blocked = (instance.config.disable || []).some(fn => typeof fn === 'function' && fn(today));
+    if (blocked) instance.jumpToDate(today);      // can't select a disabled day — just navigate to it
+    else { instance.setDate(today, true); instance.close(); }
+  });
+  instance.calendarContainer.appendChild(btn);
+}
+
+// Combined onReady: year dropdown + Today button.
+function fpOnReady(selectedDates, dateStr, instance) {
+  applyYearDropdown(selectedDates, dateStr, instance);
+  addTodayButton(instance);
 }
 
 export function parseDDMMMYYYY(s) {
@@ -437,8 +466,9 @@ export function layeredField(opts) {
         flatpickr(inp, {
           dateFormat: 'd-M-Y',
           allowInput: true,
+          locale: { weekdays: FP_WEEKDAYS },
           onChange: () => { inp.dataset.userSet = '1'; fireChange(); },
-          onReady: applyYearDropdown,
+          onReady: fpOnReady,
           onMonthChange: applyYearDropdown,
           onYearChange: applyYearDropdown,
         });

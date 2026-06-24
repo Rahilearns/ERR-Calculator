@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzi';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzj';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -606,7 +606,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
   const cofRecs = params.cofData || [];
   const lastIdxLE = (arr, key, d) => { let k = -1; for (let j = 0; j < arr.length; j++) if (arr[j][key] && arr[j][key] <= d) k = j; return k; };
   const lendCell = (d) => `${LAYER}!$E$${3 + Math.max(0, lastIdxLE(rateLayers, 'fromDate', d))}`;     // active lending rate on date d
-  const cofCell = (d) => `${LAYER}!$W$${3 + Math.max(0, lastIdxLE(cofRecs, 'date', d))}`;               // Eligible COF on date d
+  const cofCell = (d) => `${LAYER}!$U$${3 + Math.max(0, lastIdxLE(cofRecs, 'date', d))}`;               // Eligible COF on date d
   const secActive = (d) => securityLayers.filter(l => l.fromDate <= d).length;                          // # security layers active by d
   // Most recent active layer wins: its own Amount ($K) is the balance, its Active Rate ($L) the rate.
   const secAmtCell = (d) => { const n = secActive(d); return n ? `${LAYER}!$K$${3 + n - 1}` : null; };
@@ -654,7 +654,7 @@ function downloadRevisionStructuredVerify(filename, ctx) {
     return segs.map((s, i) => {
       const startRef = i === 0 ? `B${psXr}` : dateLit(s.from);
       const endRef = i === segs.length - 1 ? `B${xr}` : dateLit(s.to);
-      return `(F${psXr}*${lendCell(s.from)}/360*(${endRef}-${startRef}))`;
+      return `(F${psXr}*${lendCell(s.from)}/360*DAYS360(${startRef},${endRef}))`;
     }).join('+');
   };
 
@@ -920,7 +920,6 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
   const title = (addr, text) => setCell(wsL, addr, text, { text: true, s: RR_STYLE.title });
   const head = (addr, text) => setCell(wsL, addr, text, { text: true, s: RR_STYLE.colHead });
   const intCell = (addr, v) => setCell(wsL, addr, v, { z: RR_FMT.INT0, s: RR_STYLE.cell });
-  const plainCell = (addr, v) => setCell(wsL, addr, v, { s: RR_STYLE.cell });
   const pctCell = (addr, v) => setCell(wsL, addr, v, { z: RR_FMT.PCT2, s: RR_STYLE.cell });
   const numCell = (addr, v) => setCell(wsL, addr, v, { z: RR_FMT.NUM2, s: RR_STYLE.cell });
   const dateCell = (addr, f) => setCell(wsL, addr, 0, { f, z: RR_FMT.DATE_SHORT, s: RR_STYLE.cell });
@@ -953,29 +952,29 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
     setCell(wsL, `M${r}`, `Loan Security ${i + 1}`, { text: true, s: RR_STYLE.cell });
   });
 
-  // Table 3 — COF + ISC Layers (Q:W). Eligible COF = MAX(COF, ISC) + 0.3%.
-  title('Q1', 'COF + ISC Layers');
+  // Table 3 — COF + ISC Layers (O:U). Year/Month/Day are integers; Eligible COF = MAX(COF,ISC)+0.3%.
+  title('O1', 'COF + ISC Layers');
   ['Year', 'Month', 'Day', 'Date', 'COF\n(M-o-M)', 'ISC', 'Eligible COF']
-    .forEach((h, c) => head(XLSX.utils.encode_cell({ r: 1, c: 16 + c }), h));
+    .forEach((h, c) => head(XLSX.utils.encode_cell({ r: 1, c: 14 + c }), h));
   cofRecs.forEach((rec, i) => {
     const r = 3 + i; const [y, m, d] = ymd(rec.date);
-    plainCell(`Q${r}`, y); plainCell(`R${r}`, m); plainCell(`S${r}`, d);
-    dateCell(`T${r}`, `DATE(Q${r},R${r},S${r})`);
+    intCell(`O${r}`, y); intCell(`P${r}`, m); intCell(`Q${r}`, d);
+    dateCell(`R${r}`, `DATE(O${r},P${r},Q${r})`);
     const hasRaw = (rec.cof != null && rec.isc != null);
-    pctCell(`U${r}`, rec.cof != null ? rec.cof : rec.rate);
-    if (rec.isc != null) pctCell(`V${r}`, rec.isc);
-    if (hasRaw) fNum(`W${r}`, `MAX(U${r}:V${r})+0.3%`, RR_FMT.PCT2);
-    else pctCell(`W${r}`, rec.rate);
+    pctCell(`S${r}`, rec.cof != null ? rec.cof : rec.rate);
+    if (rec.isc != null) pctCell(`T${r}`, rec.isc);
+    if (hasRaw) fNum(`U${r}`, `MAX(S${r}:T${r})+0.3%`, RR_FMT.PCT2);
+    else pctCell(`U${r}`, rec.rate);
   });
 
   const maxRows = Math.max(rateLayers.length, securityLayers.length, cofRecs.length, 1);
-  wsL['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRows + 1, c: 22 } });
+  wsL['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRows + 1, c: 20 } });
   const W = (n) => ({ wch: n });
-  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(15), W(3), W(3), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10)];
+  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(15), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10)];
   wsL['!rows'] = []; wsL['!rows'][0] = { hpt: 21.75 }; wsL['!rows'][1] = { hpt: 28 };
   wsL['!merges'] = [
     { s: { r: 0, c: 6 }, e: { r: 0, c: 12 } },   // G1:M1 (Loan Security)
-    { s: { r: 0, c: 16 }, e: { r: 0, c: 22 } },  // Q1:W1 (COF + ISC)
+    { s: { r: 0, c: 14 }, e: { r: 0, c: 20 } },  // O1:U1 (COF + ISC)
   ];
   if (includeLending) wsL['!merges'].unshift({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }); // A1:E1 (Lending Rate)
   return wsL;
