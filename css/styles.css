@@ -691,20 +691,31 @@ select.field-error,
   color: var(--text-soft);
   cursor: not-allowed;
 }
-/* Delete (×) overlaid at the row's top-right corner so it claims no grid column and the
-   input boxes can stretch full width. Hidden on the undeletable minimum rows. */
+/* Delete (×) as a small badge half-overlapping the row's top-right corner — same treatment as
+   the toast close button. Claims no grid column; hidden on the undeletable minimum rows. */
 .layer-row .row-del {
   position: absolute;
-  top: 3px;
-  right: 5px;
-  background: transparent;
-  border: none;
-  color: var(--danger);
+  top: -9px;
+  right: -9px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong, var(--border));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  color: var(--text-mute);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
+  z-index: 3;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
+.layer-row .row-del:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .add-layer {
   align-self: flex-start;
   background: var(--bg);
@@ -962,14 +973,14 @@ tr.totals-row td {
 .dp-todaybtn:hover { background: var(--primary-soft); }
 /* Navigation motion — the body slides in the arrow's direction (so a click visibly moves time);
    drilling in/out zooms instead, so it reads as a different kind of move. */
-@keyframes dpDown { from { transform: translateY(-15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes dpUp   { from { transform: translateY(15px);  opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes dpZoomIn  { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes dpZoomOut { from { transform: scale(1.07); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.dp-anim-down { animation: dpDown 0.19s ease-out; }
-.dp-anim-up { animation: dpUp 0.19s ease-out; }
-.dp-anim-zoomin { animation: dpZoomIn 0.17s ease-out; }
-.dp-anim-zoomout { animation: dpZoomOut 0.17s ease-out; }
+@keyframes dpDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes dpUp   { from { transform: translateY(20px);  opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes dpZoomIn  { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes dpZoomOut { from { transform: scale(1.08); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dp-anim-down { animation: dpDown 0.5s ease-out; }
+.dp-anim-up { animation: dpUp 0.5s ease-out; }
+.dp-anim-zoomin { animation: dpZoomIn 0.5s ease-out; }
+.dp-anim-zoomout { animation: dpZoomOut 0.5s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .dp-anim-down, .dp-anim-up, .dp-anim-zoomin, .dp-anim-zoomout { animation: none; }
 }
