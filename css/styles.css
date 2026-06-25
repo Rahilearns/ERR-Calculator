@@ -960,6 +960,19 @@ tr.totals-row td {
   transition: background 0.12s ease;
 }
 .dp-todaybtn:hover { background: var(--primary-soft); }
+/* Navigation motion — the body slides in the arrow's direction (so a click visibly moves time);
+   drilling in/out zooms instead, so it reads as a different kind of move. */
+@keyframes dpDown { from { transform: translateY(-15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes dpUp   { from { transform: translateY(15px);  opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes dpZoomIn  { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes dpZoomOut { from { transform: scale(1.07); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dp-anim-down { animation: dpDown 0.19s ease-out; }
+.dp-anim-up { animation: dpUp 0.19s ease-out; }
+.dp-anim-zoomin { animation: dpZoomIn 0.17s ease-out; }
+.dp-anim-zoomout { animation: dpZoomOut 0.17s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .dp-anim-down, .dp-anim-up, .dp-anim-zoomin, .dp-anim-zoomout { animation: none; }
+}
 
 /* Tables */
 table.schedule {

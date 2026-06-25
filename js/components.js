@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzk';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzl';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -259,7 +259,7 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
     if (view === 'days') { viewMonth += dir; if (viewMonth < 0) { viewMonth = 11; viewYear--; } else if (viewMonth > 11) { viewMonth = 0; viewYear++; } }
     else if (view === 'months') viewYear += dir;
     else viewYear += dir * 10;
-    render();
+    render(dir < 0 ? 'up' : 'down'); // slide in the same direction as the clicked arrow
   }
   function headerEl(titleText, onTitleClick) {
     const title = el('button', { class: 'dp-title', type: 'button' }, titleText);
@@ -271,12 +271,25 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
     return el('div', { class: 'dp-head' }, title, el('div', { class: 'dp-navs' }, up, down));
   }
 
-  function render() {
+  // anim: 'up' | 'down' (arrow paging) | 'zoomin' | 'zoomout' (drill in/out) — animates the body
+  // (everything below the header) so the change is visible; the header & Today button stay put.
+  function render(anim) {
     if (!pop) return;
     pop.innerHTML = '';
-    if (view === 'days') renderDays();
-    else if (view === 'months') renderMonths();
-    else renderYears();
+    const body = el('div', { class: 'dp-body' + (anim ? ' dp-anim-' + anim : '') });
+    if (view === 'days') {
+      pop.appendChild(headerEl(`${DP_MONTHS_FULL[viewMonth]} ${viewYear}`, () => { view = 'months'; render('zoomout'); }));
+      body.appendChild(el('div', { class: 'dp-weekdays' }, ...DP_WEEKDAYS.map(w => el('div', { class: 'dp-wd' }, w))));
+      body.appendChild(buildDaysGrid());
+    } else if (view === 'months') {
+      pop.appendChild(headerEl(`${viewYear}`, () => { view = 'years'; render('zoomout'); }));
+      body.appendChild(buildMonthsGrid());
+    } else {
+      const decadeStart = Math.floor(viewYear / 10) * 10;
+      pop.appendChild(headerEl(`${decadeStart} - ${decadeStart + 9}`, null));
+      body.appendChild(buildYearsGrid(decadeStart));
+    }
+    pop.appendChild(body);
     const tbtn = el('button', { class: 'dp-todaybtn', type: 'button' }, 'Today');
     tbtn.addEventListener('click', () => {
       const t = startOfDay(new Date());
@@ -286,9 +299,7 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
     pop.appendChild(tbtn);
     position();
   }
-  function renderDays() {
-    pop.appendChild(headerEl(`${DP_MONTHS_FULL[viewMonth]} ${viewYear}`, () => { view = 'months'; render(); }));
-    pop.appendChild(el('div', { class: 'dp-weekdays' }, ...DP_WEEKDAYS.map(w => el('div', { class: 'dp-wd' }, w))));
+  function buildDaysGrid() {
     const grid = el('div', { class: 'dp-grid dp-days' });
     const firstDow = new Date(viewYear, viewMonth, 1).getDay();
     const t = startOfDay(new Date());
@@ -304,10 +315,9 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
       if (dis) cell.disabled = true; else cell.addEventListener('click', () => commit(startOfDay(d)));
       grid.appendChild(cell);
     }
-    pop.appendChild(grid);
+    return grid;
   }
-  function renderMonths() {
-    pop.appendChild(headerEl(`${viewYear}`, () => { view = 'years'; render(); }));
+  function buildMonthsGrid() {
     const grid = el('div', { class: 'dp-grid dp-my' });
     const now = new Date();
     for (let m = 0; m < 12; m++) {
@@ -315,14 +325,12 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
       if (selected && selected.getFullYear() === viewYear && selected.getMonth() === m) cls.push('dp-selected');
       else if (now.getFullYear() === viewYear && now.getMonth() === m) cls.push('dp-today');
       const cell = el('button', { class: cls.join(' '), type: 'button' }, DP_MONTHS_ABBR[m]);
-      cell.addEventListener('click', () => { viewMonth = m; view = 'days'; render(); });
+      cell.addEventListener('click', () => { viewMonth = m; view = 'days'; render('zoomin'); });
       grid.appendChild(cell);
     }
-    pop.appendChild(grid);
+    return grid;
   }
-  function renderYears() {
-    const decadeStart = Math.floor(viewYear / 10) * 10;
-    pop.appendChild(headerEl(`${decadeStart} - ${decadeStart + 9}`, null));
+  function buildYearsGrid(decadeStart) {
     const grid = el('div', { class: 'dp-grid dp-my' });
     const now = new Date();
     for (let i = -2; i <= 13; i++) {
@@ -332,10 +340,10 @@ function attachDatePicker(input, { onChange = null, disable = null } = {}) {
       if (selected && selected.getFullYear() === y) cls.push('dp-selected');
       else if (now.getFullYear() === y) cls.push('dp-today');
       const cell = el('button', { class: cls.join(' '), type: 'button' }, String(y));
-      cell.addEventListener('click', () => { viewYear = y; view = 'months'; render(); });
+      cell.addEventListener('click', () => { viewYear = y; view = 'months'; render('zoomin'); });
       grid.appendChild(cell);
     }
-    pop.appendChild(grid);
+    return grid;
   }
 
   input.addEventListener('focus', open);
