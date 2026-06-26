@@ -1,12 +1,14 @@
 // App controller: tabs, theme, compare view
-import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603zzm';
+import { el, openModal, closeModal, toast, optionField } from './components.js?v=20260603zzn';
 import {
   renderRegularLoan, renderCustomizedLoan,
   renderRateRevisionStructured, renderRateRevisionCustomized,
-} from './pages.js?v=20260603zzm';
-import { listSummaries, deleteSummary } from './storage.js?v=20260603zzm';
-import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603zzm';
-import { openManual } from './manual.js?v=20260603zzm';
+} from './pages.js?v=20260603zzn';
+import { listSummaries, deleteSummary } from './storage.js?v=20260603zzn';
+import { formatPercent, formatMoney, formatNumber } from './formatting.js?v=20260603zzn';
+import { openManual } from './manual.js?v=20260603zzn';
+import { AUTH_ENABLED } from './config.js?v=20260603zzn';
+import { fetchMe, renderAuthScreen, renderAdminPanel, userChip, logout } from './auth.js?v=20260603zzn';
 
 const root = document.getElementById('app-root');
 const compareBtn = document.getElementById('compare-btn');
@@ -36,8 +38,12 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   applyTheme(current === 'dark' ? 'light' : 'dark');
 });
 
-// ---------------- Brand back to first tab ----------------
-document.getElementById('brand-home').addEventListener('click', () => navigate('regular'));
+// ---------------- Brand back to first tab (only when allowed to view the calculator) ----------------
+document.getElementById('brand-home').addEventListener('click', () => {
+  if (AUTH_ENABLED && !authedUser) return;          // not signed in → stay on the login screen
+  document.body.classList.remove('auth-gate');
+  navigate('regular');
+});
 
 // ---------------- Info button → per-module user guide ----------------
 document.getElementById('info-btn').addEventListener('click', () => openManual(TABS[currentTab] ? currentTab : 'regular'));
@@ -194,7 +200,39 @@ function buildCompareCol(s, refresh) {
   return col;
 }
 
+// ---------------- Auth gate ----------------
+// When AUTH_ENABLED is false (no API configured), the app boots straight into the calculator —
+// exactly as before. When true, the calculator is hidden behind login + admin approval.
+let authedUser = null;
+
+function enterApp(user) {
+  authedUser = user;
+  document.body.classList.remove('auth-gate');
+  mountUserChip(user);
+  navigate('regular');
+}
+function gateToAuth() {
+  document.body.classList.add('auth-gate');
+  renderAuthScreen(root, enterApp);
+}
+function mountUserChip(user) {
+  if (document.getElementById('user-chip')) return;
+  const actions = document.querySelector('header .header-actions:not(.header-left)');
+  if (!actions) return;
+  const chip = userChip(user, {
+    onAdmin: () => { document.body.classList.add('auth-gate'); renderAdminPanel(root, () => { document.body.classList.remove('auth-gate'); navigate('regular'); }); },
+    onLogout: logout,
+  });
+  chip.id = 'user-chip';
+  actions.insertBefore(chip, actions.firstChild);
+}
+
 // ---------------- Boot ----------------
 initTheme();
 refreshCompareVisibility();
-navigate('regular');
+(async () => {
+  if (!AUTH_ENABLED) { navigate('regular'); return; }
+  let user = null;
+  try { user = await fetchMe(); } catch { /* offline / server down → show login */ }
+  if (user) enterApp(user); else gateToAuth();
+})();

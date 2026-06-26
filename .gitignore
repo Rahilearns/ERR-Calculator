@@ -10,6 +10,12 @@ Prompts.*
 !assets/
 !assets/*.xlsx
 
+# Backend (auth server) — never commit deps, secrets, or the user store (password hashes)
+node_modules/
+.env
+server/.env
+server/data/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
