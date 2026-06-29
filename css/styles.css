@@ -1115,6 +1115,56 @@ table.schedule th {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ===== Loan Security layers — read-only table + editor popup ===== */
+.sec-table { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.sec-empty { padding: 10px 2px; }
+.sec-row {
+  display: grid; grid-template-columns: 1.1fr 1.2fr 1.3fr auto; gap: 8px; align-items: center;
+  padding: 9px 12px; background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 13px;
+}
+.sec-row.sec-head { background: transparent; border: none; padding: 2px 12px; font-size: 11.5px; font-weight: 600; color: var(--text-soft); }
+.sec-num { text-align: right; font-variant-numeric: tabular-nums; }
+.sec-head div:nth-child(2), .sec-head div:nth-child(3) { text-align: right; }
+.sec-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.sec-btn {
+  padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.sec-btn:hover { border-color: var(--primary); color: var(--primary); }
+.sec-btn.sec-del:hover { border-color: var(--danger); color: var(--danger); }
+.sec-add-btn {
+  margin-top: 8px; padding: 7px 14px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong); background: var(--bg-soft); color: var(--text-soft);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.sec-add-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Editor popup */
+.modal-card--sec { width: min(560px, 94vw); }
+.sec-edit-head h3 { margin: 0 0 4px; font-size: 17px; color: var(--text); }
+.sec-edit-date { margin: 12px 0 8px; max-width: 260px; }
+.sec-entry { display: grid; grid-template-columns: 1fr 1fr 28px; gap: 10px; align-items: center; margin-bottom: 8px; }
+.sec-entry-head { margin-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--text-soft); }
+.sec-entry .field { margin: 0; }
+.sec-entry .field label { display: none; }   /* the header row labels these columns */
+.sec-entry .row-del { position: static; width: 26px; height: 26px; align-self: center; box-shadow: none; }
+.sec-add-entry { margin-top: 2px; }
+.sec-edit-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* Re-confirmation overlay — stacks above the modal (100) + date picker (200) */
+.sec-confirm-back {
+  position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 15, 30, 0.55); backdrop-filter: blur(2px);
+}
+.sec-confirm-card {
+  background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 22px 22px 18px; width: min(380px, 92vw); box-shadow: var(--shadow-strong);
+}
+.sec-confirm-msg { margin: 0 0 18px; font-size: 14px; line-height: 1.5; }
+.sec-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
 /* Bottom compare bar — its own section, shown only once a summary is saved */
 .compare-bar {
   display: flex;

@@ -1,24 +1,24 @@
 // Page builders for the four calculation flows
 import {
   el, numberField, percentField, optionField, dateField, textField,
-  monthBoxesField, layeredField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
+  monthBoxesField, layeredField, securityLayersField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzm';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzm';
+} from './components.js?v=20260603zzo';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzo';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzm';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzm';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzm';
+} from './calculations.js?v=20260603zzo';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzo';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzo';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzm';
+} from './excel.js?v=20260603zzo';
 
 // Loan-security model: each row is the security balance in effect from its date, at its rate
 // (a total — not an addition). The most recent layer applies until the next layer's date.
@@ -602,21 +602,12 @@ export function renderRateRevisionStructured(root) {
     getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
   });
 
-  const securityLayers = layeredField({
+  const securityLayers = securityLayersField({
     label: 'Loan Security Layers',
     name: 'securityLayers',
-    schema: [
-      { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'amount', label: 'Amount', type: 'number' },
-      { key: 'activeRate', label: 'Active Rate', type: 'percent' },
-    ],
-    addLabel: '+ Add Security Layer',
     help: SECURITY_LAYERS_HELP,
-    minRows: 1,
-    initialRows: 1,
-    cascadingFromKey: 'fromDate',
-    getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
-    getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
+    getAnchor: () => ({ value: disbursementDate.getValue() }),
+    getMaturity: () => maturityISO(),
   });
 
   // External inputs (disbursement / tenor) feed the cascade engine — re-run on change.
@@ -791,15 +782,13 @@ export function renderRateRevisionCustomized(root) {
   section.appendChild(el('div', { class: 'sub-card' }, uploadZone));
 
   // From-only security layers (no To Date) — each applies from its From until the next layer's From.
-  const securityLayers = layeredField({
+  // Date defaults/bounds come from the uploaded schedule's span (first row = start, last = maturity).
+  const securityLayers = securityLayersField({
     label: 'Loan Security Layers',
     name: 'securityLayers',
-    schema: [
-      { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'amount', label: 'Amount', type: 'number' },
-      { key: 'activeRate', label: 'Active Rate', type: 'percent' },
-    ],
-    minRows: 1, initialRows: 1, addLabel: '+ Add Security Layer', help: SECURITY_LAYERS_HELP,
+    help: SECURITY_LAYERS_HELP,
+    getAnchor: () => ({ value: (uploadedRows && uploadedRows[0] && uploadedRows[0].date) || null }),
+    getMaturity: () => (uploadedRows && uploadedRows.length ? uploadedRows[uploadedRows.length - 1].date : null),
   });
 
   section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
@@ -1116,9 +1105,9 @@ function restoreDraft(tabKey, fields) {
     if (fields.securityLayers && Array.isArray(data.securityLayers) && data.securityLayers.length) {
       fields.securityLayers.setValue(data.securityLayers.map(L => ({
         fromDate: isoToDDMMMYYYY(L.fromDate),
-        toDate: isoToDDMMMYYYY(L.toDate),
         amount: L.amount,
         activeRate: L.activeRate,
+        securities: L.securities,
       })));
     }
     if (fields.cofLayers && Array.isArray(data.cofLayers) && data.cofLayers.length) {

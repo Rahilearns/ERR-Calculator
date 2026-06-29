@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzm';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzo';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -812,6 +812,162 @@ export function layeredField(opts) {
   wrapper.hasErrors = hasErrors;
   wrapper.canAddNew = canAddNew;
   // Allow page code to disable inheritance (e.g., for Customized Payment Layers that have non-cascading payment types)
+  return wrapper;
+}
+
+// A confirmation overlay that stacks ABOVE the shared modal + date picker (z-index 400).
+function confirmOverlay(message, { yesLabel = 'Yes', noLabel = 'No, go back', danger = false, onYes } = {}) {
+  const back = el('div', { class: 'sec-confirm-back' });
+  const yesBtn = el('button', { type: 'button', class: danger ? 'danger-btn' : 'primary-btn' }, yesLabel);
+  const noBtn = el('button', { type: 'button', class: 'ghost-btn modal-ghost' }, noLabel);
+  const card = el('div', { class: 'sec-confirm-card' },
+    el('p', { class: 'sec-confirm-msg' }, message),
+    el('div', { class: 'sec-confirm-actions' }, noBtn, yesBtn),
+  );
+  back.appendChild(card);
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  noBtn.addEventListener('click', close);
+  yesBtn.addEventListener('click', () => { close(); if (onYes) onYes(); });
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+}
+
+// ── Loan Security layers (Rate Revision) ────────────────────────────────────────
+// Read-only table — ONE row per From Date — showing Total Outstanding (Σ amounts) and the
+// Applicable Interest Rate (amount-weighted average). Editing a row opens a popup that captures
+// the date once and one-or-more {Outstanding Amount, Interest Rate} securities (an RM may take
+// several). Save & Cancel each ask for a re-confirmation. getValue() returns each row as
+// { fromDate, amount, activeRate, securities[] } — amount/activeRate feed the engine unchanged
+// (combined per date); securities[] carries the breakdown for the Verify Excel.
+export function securityLayersField({ label, name, help = '', getAnchor = null, getMaturity = null }) {
+  let data = []; // [{ fromDate: ISO|null, securities: [{ amount:Number, rate:Number(decimal) }] }]
+  const money2 = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const rowTotal = (r) => (r.securities || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const rowRate = (r) => {
+    const tot = rowTotal(r);
+    if (tot <= 0) return 0;
+    return (r.securities || []).reduce((s, x) => s + (Number(x.amount) || 0) * (Number(x.rate) || 0), 0) / tot;
+  };
+  const dmy = (iso) => (iso ? formatDDMMMYYYY(isoToLocalDate(iso)) : '—');
+  const closeEditor = () => { closeModal(); const mc = document.getElementById('modal-card'); if (mc) mc.classList.remove('modal-card--sec'); };
+
+  const wrapper = el('div', { class: 'field' });
+  wrapper.appendChild(el('label', {}, label));
+  const tableWrap = el('div', { class: 'sec-table', 'data-name': name });
+  wrapper.appendChild(tableWrap);
+  const addBtn = el('button', { type: 'button', class: 'sec-add-btn' }, '+ Add Security Layer');
+  addBtn.addEventListener('click', () => openEditor(null));
+  wrapper.appendChild(addBtn);
+  if (help) wrapper.appendChild(el('span', { class: 'help' }, help));
+
+  function render() {
+    data.sort((a, b) => String(a.fromDate || '').localeCompare(String(b.fromDate || '')));
+    tableWrap.innerHTML = '';
+    if (!data.length) { tableWrap.appendChild(el('div', { class: 'sec-empty help' }, 'No security added yet.')); return; }
+    tableWrap.appendChild(el('div', { class: 'sec-row sec-head' },
+      el('div', {}, 'From Date'), el('div', {}, 'Total Outstanding'),
+      el('div', {}, 'Applicable Interest Rate'), el('div', {}, '')));
+    data.forEach((r, i) => {
+      const editBtn = el('button', { type: 'button', class: 'sec-btn' }, 'Edit');
+      editBtn.addEventListener('click', () => openEditor(i));
+      const delBtn = el('button', { type: 'button', class: 'sec-btn sec-del' }, 'Delete');
+      delBtn.addEventListener('click', () => confirmOverlay(`Remove the security row for ${dmy(r.fromDate)}?`,
+        { yesLabel: 'Yes, remove', danger: true, onYes: () => { data.splice(i, 1); render(); } }));
+      tableWrap.appendChild(el('div', { class: 'sec-row' },
+        el('div', {}, dmy(r.fromDate)),
+        el('div', { class: 'sec-num' }, money2(rowTotal(r))),
+        el('div', { class: 'sec-num' }, (rowRate(r) * 100).toFixed(2) + '%'),
+        el('div', { class: 'sec-acts' }, editBtn, delBtn)));
+    });
+  }
+
+  function openEditor(index) {
+    const isNew = index == null;
+    const src = isNew ? { fromDate: null, securities: [] } : data[index];
+    const work = { fromDate: src.fromDate, securities: (src.securities || []).map((s) => ({ ...s })) };
+    if (isNew && !work.fromDate && data.length === 0 && getAnchor) { const a = getAnchor(); if (a && a.value) work.fromDate = a.value; }
+    if (!work.securities.length) work.securities.push({ amount: null, rate: null });
+
+    const dateF = dateField({ label: 'From Date', name: 'secFromDate' });
+    if (work.fromDate) dateF.setValue(work.fromDate);
+
+    const entriesWrap = el('div', { class: 'sec-entries' });
+    const entryRows = [];
+    function addEntryRow(values = {}) {
+      const amt = numberField({ label: 'Outstanding Amount', name: 'amount' });
+      if (values.amount != null) amt.setValue(values.amount);
+      const rate = percentField({ label: 'Interest Rate', name: 'rate' });
+      if (values.rate != null) rate.setValue(values.rate);
+      const rm = el('button', { type: 'button', class: 'row-del', title: 'Remove this security' }, '×');
+      const rowEl = el('div', { class: 'sec-entry' }, amt, rate, rm);
+      const api = { amt, rate, rowEl };
+      rm.addEventListener('click', () => {
+        if (entryRows.length <= 1) { toast('Keep at least one security, or use Cancel.', 'warn'); return; }
+        const k = entryRows.indexOf(api); if (k >= 0) { entryRows.splice(k, 1); rowEl.remove(); }
+      });
+      entryRows.push(api);
+      entriesWrap.appendChild(rowEl);
+    }
+    work.securities.forEach((s) => addEntryRow(s));
+
+    const addEntry = el('button', { type: 'button', class: 'sec-add-btn sec-add-entry' }, '+ Add another security');
+    addEntry.addEventListener('click', () => addEntryRow({}));
+    const cancelBtn = el('button', { type: 'button', class: 'ghost-btn modal-ghost' }, 'Cancel');
+    const saveBtn = el('button', { type: 'button', class: 'primary-btn' }, 'Save');
+
+    cancelBtn.addEventListener('click', () => confirmOverlay('Discard your changes and close this window?',
+      { yesLabel: 'Yes, discard', danger: true, onYes: closeEditor }));
+    saveBtn.addEventListener('click', () => {
+      const fromDate = dateF.getValue();
+      const securities = entryRows.map((r) => ({ amount: r.amt.getValue(), rate: r.rate.getValue() }))
+        .filter((s) => s.amount != null && s.amount > 0);
+      if (!fromDate) return toast('Enter the From Date.', 'error');
+      if (!securities.length) return toast('Add at least one security with an outstanding amount.', 'error');
+      if (securities.some((s) => s.rate == null)) return toast('Enter an interest rate for every security.', 'error');
+      const anchor = getAnchor && getAnchor();
+      if (anchor && anchor.value && fromDate < anchor.value) return toast('From Date cannot be before the disbursement date.', 'error');
+      const mat = getMaturity && getMaturity();
+      if (mat && fromDate >= mat) return toast(`From Date must be earlier than loan maturity (${dmy(mat)}).`, 'error');
+      if (data.some((r, k) => k !== index && r.fromDate === fromDate)) return toast('A security row for this date already exists — edit that row instead.', 'error');
+      confirmOverlay('Save these security details?', { yesLabel: 'Yes, save', onYes: () => {
+        const out = { fromDate, securities };
+        if (isNew) data.push(out); else data[index] = out;
+        closeEditor(); render();
+      } });
+    });
+
+    const card = el('div', { class: 'sec-edit' },
+      el('div', { class: 'sec-edit-head' }, el('h3', {}, isNew ? 'Add Loan Security' : 'Edit Loan Security')),
+      el('p', { class: 'help' }, 'Choose the date this security applies from, then add one or more securities (amount + rate) for that date.'),
+      el('div', { class: 'sec-edit-date' }, dateF),
+      el('div', { class: 'sec-entry sec-entry-head' }, el('div', {}, 'Outstanding Amount'), el('div', {}, 'Interest Rate'), el('div', {}, '')),
+      entriesWrap, addEntry,
+      el('div', { class: 'sec-edit-actions' }, cancelBtn, saveBtn));
+    openModal(card);
+    const back = document.querySelector('#modal-root .modal-backdrop'); if (back) back.onclick = null; // force Save/Cancel
+    const mc = document.getElementById('modal-card'); if (mc) mc.classList.add('modal-card--sec');
+  }
+
+  wrapper.getValue = () => data
+    .filter((r) => r.fromDate && (r.securities || []).some((s) => Number(s.amount) > 0))
+    .map((r) => ({
+      fromDate: r.fromDate, amount: rowTotal(r), activeRate: rowRate(r),
+      securities: (r.securities || []).filter((s) => Number(s.amount) > 0).map((s) => ({ amount: Number(s.amount), rate: Number(s.rate) })),
+    }));
+  wrapper.setValue = (arr) => {
+    data = (arr || []).map((item) => {
+      const d = item.fromDate ? parseDDMMMYYYY(item.fromDate) : null;
+      const iso = d ? d.toISOString().slice(0, 10) : null;
+      let securities;
+      if (Array.isArray(item.securities) && item.securities.length) securities = item.securities.map((s) => ({ amount: Number(s.amount) || 0, rate: Number(s.rate) || 0 }));
+      else if (item.amount != null) securities = [{ amount: Number(item.amount) || 0, rate: Number(item.activeRate) || 0 }];
+      else securities = [];
+      return { fromDate: iso, securities };
+    }).filter((r) => r.securities.length);
+    render();
+  };
+  wrapper.applyLayerRules = () => render();
+  render();
   return wrapper;
 }
 

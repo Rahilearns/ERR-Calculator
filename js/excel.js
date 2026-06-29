@@ -1,5 +1,5 @@
 // Excel / Word / PDF I/O via CDN libs
-import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzm';
+import { formatMoney as fmtM, formatPercent as fmtP } from './formatting.js?v=20260603zzo';
 
 // Round a cell value to 2 decimals (numeric — kept distinct from fmtM which returns a string).
 function num(v) {
@@ -967,14 +967,32 @@ function buildLayersSheet(rateLayers, securityLayers, cofRecs, includeLending = 
     else pctCell(`U${r}`, rec.rate);
   });
 
-  const maxRows = Math.max(rateLayers.length, securityLayers.length, cofRecs.length, 1);
-  wsL['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRows + 1, c: 20 } });
+  // Table 4 — Loan Security breakdown (W:Y). Each individual security behind the combined rows in
+  // G:M (where K = Σ these amounts and L = the amount-weighted-average of these rates). Purely
+  // informational — the Schedule never references this table, so the combined table stays intact.
+  title('W1', 'Loan Security — Breakdown');
+  ['From Date', 'Outstanding Amount', 'Interest Rate'].forEach((h, c) => head(XLSX.utils.encode_cell({ r: 1, c: 22 + c }), h));
+  let br = 3;
+  securityLayers.forEach((l) => {
+    const secs = (l.securities && l.securities.length) ? l.securities : [{ amount: l.amount, rate: l.activeRate }];
+    secs.forEach((s) => {
+      setCell(wsL, `W${br}`, fmtDateDMY(l.fromDate), { text: true, s: RR_STYLE.cell });
+      numCell(`X${br}`, s.amount || 0);
+      pctCell(`Y${br}`, s.rate || 0);
+      br++;
+    });
+  });
+  const breakdownRows = br - 3;
+
+  const maxRows = Math.max(rateLayers.length, securityLayers.length, cofRecs.length, breakdownRows, 1);
+  wsL['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRows + 1, c: 24 } });
   const W = (n) => ({ wch: n });
-  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(15), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10)];
+  wsL['!cols'] = [W(7), W(6), W(6), W(9), W(9), W(3), W(7), W(6), W(6), W(9), W(13), W(8), W(15), W(3), W(7), W(6), W(6), W(10), W(11), W(8), W(10), W(3), W(11), W(15), W(11)];
   wsL['!rows'] = []; wsL['!rows'][0] = { hpt: 21.75 }; wsL['!rows'][1] = { hpt: 28 };
   wsL['!merges'] = [
     { s: { r: 0, c: 6 }, e: { r: 0, c: 12 } },   // G1:M1 (Loan Security)
     { s: { r: 0, c: 14 }, e: { r: 0, c: 20 } },  // O1:U1 (COF + ISC)
+    { s: { r: 0, c: 22 }, e: { r: 0, c: 24 } },  // W1:Y1 (Loan Security — Breakdown)
   ];
   if (includeLending) wsL['!merges'].unshift({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }); // A1:E1 (Lending Rate)
   return wsL;
