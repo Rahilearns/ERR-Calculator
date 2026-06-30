@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField, textField,
   monthBoxesField, layeredField, securityLayersField, rateLayersField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzq';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzq';
+} from './components.js?v=20260603zzr';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzr';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzq';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzq';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzq';
+} from './calculations.js?v=20260603zzr';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzr';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzr';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzq';
+} from './excel.js?v=20260603zzr';
 
 // Cached page state by tab key (also persisted via storage saveDraft)
 const tabState = {};
@@ -625,7 +625,7 @@ export function renderRateRevisionStructured(root) {
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
   section.appendChild(el('div', { class: 'layer-panel' }, rateLayers));
   section.appendChild(el('div', { class: 'layer-panel' }, securityLayers));
-  section.appendChild(el('div', { class: 'sub-card' }, cofField));
+  section.appendChild(cofField);
   section.appendChild(el('div', { class: 'form-row' }, referenceField));
 
   function refresh() {
@@ -767,7 +767,7 @@ export function renderRateRevisionCustomized(root) {
         el('div', { class: 'uz-sub' }, 'One Excel file (.xlsx) with the Schedule and COF Layers sheets — use the sample as the template'))),
     el('div', { class: 'uz-actions' }, uploadBtn, fileInput, uploadedLabel),
     el('div', { class: 'uz-sample' }, sampleLink));
-  section.appendChild(el('div', { class: 'sub-card' }, uploadZone));
+  section.appendChild(uploadZone);
 
   // From-only security layers (no To Date) — each applies from its From until the next layer's From.
   // Date defaults/bounds come from the uploaded schedule's span (first row = start, last = maturity).
