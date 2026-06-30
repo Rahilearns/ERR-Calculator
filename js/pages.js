@@ -1,28 +1,24 @@
 // Page builders for the four calculation flows
 import {
   el, numberField, percentField, optionField, dateField, textField,
-  monthBoxesField, layeredField, securityLayersField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
+  monthBoxesField, layeredField, securityLayersField, rateLayersField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzp';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzp';
+} from './components.js?v=20260603zzq';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzq';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzp';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzp';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzp';
+} from './calculations.js?v=20260603zzq';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzq';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzq';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzp';
-
-// Loan-security model: each row is the security balance in effect from its date, at its rate
-// (a total — not an addition). The most recent layer applies until the next layer's date.
-const SECURITY_LAYERS_HELP = 'Each row is the loan security balance in effect from its date, at its rate — a total, not an addition. The most recent layer applies until the next layer starts.';
+} from './excel.js?v=20260603zzq';
 
 // Cached page state by tab key (also persisted via storage saveDraft)
 const tabState = {};
@@ -585,21 +581,15 @@ export function renderRateRevisionStructured(root) {
     return dt.toISOString().slice(0, 10);
   }
 
-  // From-only layers: each layer's rate/security applies from its From Date until the day
-  // before the next layer's From (the final layer extends to maturity). No To Date field.
-  const rateLayers = layeredField({
+  // From-only layers: each layer's rate applies from its From Date until the day before the
+  // next layer's From (the earliest layer also extends back to disbursement; the final layer
+  // runs to maturity). Read-only table + single "Edit" popup that captures multiple days, one
+  // rate each. Output is { fromDate, activeRate }[] — unchanged for the engine + Verify Excel.
+  const rateLayers = rateLayersField({
     label: 'Lending Rate Layers',
     name: 'rateLayers',
-    schema: [
-      { key: 'fromDate', label: 'From Date', type: 'date' },
-      { key: 'activeRate', label: 'Active Rate', type: 'percent' },
-    ],
-    addLabel: '+ Add Lending Rate Layer',
-    minRows: 2,
-    initialRows: 2,
-    cascadingFromKey: 'fromDate',
-    getAnchor: () => ({ value: disbursementDate.getValue(), kind: 'date' }),
-    getMaturity: () => ({ value: maturityISO(), kind: 'date' }),
+    getAnchor: () => ({ value: disbursementDate.getValue() }),
+    getMaturity: () => maturityISO(),
   });
 
   const securityLayers = securityLayersField({
@@ -633,7 +623,7 @@ export function renderRateRevisionStructured(root) {
   moraSection.appendChild(el('div', { class: 'sub-card' }, idpField));
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
-  section.appendChild(el('div', { class: 'sub-card' }, rateLayers));
+  section.appendChild(el('div', { class: 'layer-panel' }, rateLayers));
   section.appendChild(el('div', { class: 'layer-panel' }, securityLayers));
   section.appendChild(el('div', { class: 'sub-card' }, cofField));
   section.appendChild(el('div', { class: 'form-row' }, referenceField));
@@ -1091,7 +1081,6 @@ function restoreDraft(tabKey, fields) {
     if (fields.rateLayers && Array.isArray(data.rateLayers) && data.rateLayers.length) {
       fields.rateLayers.setValue(data.rateLayers.map(L => ({
         fromDate: isoToDDMMMYYYY(L.fromDate),
-        toDate: isoToDDMMMYYYY(L.toDate),
         activeRate: L.activeRate,
       })));
     }

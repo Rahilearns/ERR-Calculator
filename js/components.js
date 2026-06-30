@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzp';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzq';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -852,6 +852,9 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
   const closeEditor = () => { closeModal(); const mc = document.getElementById('modal-card'); if (mc) mc.classList.remove('modal-card--sec'); };
 
   const wrapper = el('div', { class: 'field' });
+  // Popup commits happen outside the form section, so bubble a 'change' from the (in-section)
+  // wrapper to wake the draft autosave — otherwise edits only persist on full page unload.
+  const notifyChange = () => wrapper.dispatchEvent(new Event('change', { bubbles: true }));
   wrapper.appendChild(el('label', {}, label));
   const tableWrap = el('div', { class: 'sec-table', 'data-name': name });
   wrapper.appendChild(tableWrap);
@@ -876,7 +879,7 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
       editBtn.addEventListener('click', () => openEditor(i));
       const delBtn = el('button', { type: 'button', class: 'sec-btn sec-del' }, 'Delete');
       delBtn.addEventListener('click', () => confirmOverlay(`Remove the security row for ${dmy(r.fromDate)}?`,
-        { yesLabel: 'Yes, remove', danger: true, onYes: () => { data.splice(i, 1); render(); } }));
+        { yesLabel: 'Yes, remove', danger: true, onYes: () => { data.splice(i, 1); render(); notifyChange(); } }));
       tableWrap.appendChild(el('div', { class: 'sec-row' },
         el('div', { class: 'sec-vals' },
           el('div', {}, dmy(r.fromDate)),
@@ -937,7 +940,7 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
       confirmOverlay('Save these security details?', { yesLabel: 'Yes, save', onYes: () => {
         const out = { fromDate, securities };
         if (isNew) data.push(out); else data[index] = out;
-        closeEditor(); render();
+        closeEditor(); render(); notifyChange();
       } });
     });
 
@@ -969,6 +972,125 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
       else securities = [];
       return { fromDate: iso, securities };
     }).filter((r) => r.securities.length);
+    render();
+  };
+  wrapper.applyLayerRules = () => render();
+  render();
+  return wrapper;
+}
+
+// ── Lending Rate layers (Rate Revision — Structured) ────────────────────────────
+// Read-only table — ONE row per day — showing From Date | Active Rate. A single "Edit"
+// button opens a popup holding EVERY day as a { From Date, Rate } row (add/remove days
+// there, one rate per day); Save rewrites the whole table after a re-confirmation.
+// getValue() returns each day as { fromDate, activeRate } sorted ascending — the engine
+// applies the earliest layer's rate to any date before it, so no disbursement-anchored
+// first row is required (the popup still seeds the first day to disbursement for convenience).
+export function rateLayersField({ label, name, getAnchor = null, getMaturity = null }) {
+  let data = []; // [{ fromDate: ISO, rate: Number(decimal) }]
+  const dmy = (iso) => (iso ? formatDDMMMYYYY(isoToLocalDate(iso)) : '—');
+  const closeEditor = () => { closeModal(); const mc = document.getElementById('modal-card'); if (mc) mc.classList.remove('modal-card--sec'); };
+
+  const wrapper = el('div', { class: 'field' });
+  // Popup commits happen outside the form section, so bubble a 'change' from the (in-section)
+  // wrapper to wake the draft autosave — otherwise edits only persist on full page unload.
+  const notifyChange = () => wrapper.dispatchEvent(new Event('change', { bubbles: true }));
+  const headRow = el('div', { class: 'rl-head' });
+  headRow.appendChild(el('label', {}, label));
+  const editBtn = el('button', { type: 'button', class: 'sec-btn rl-edit-btn' }, 'Edit');
+  editBtn.addEventListener('click', openEditor);
+  headRow.appendChild(editBtn);
+  wrapper.appendChild(headRow);
+  const tableWrap = el('div', { class: 'sec-table rl-table', 'data-name': name });
+  wrapper.appendChild(tableWrap);
+
+  function render() {
+    data.sort((a, b) => String(a.fromDate || '').localeCompare(String(b.fromDate || '')));
+    tableWrap.innerHTML = '';
+    if (!data.length) { tableWrap.appendChild(el('div', { class: 'sec-empty help' }, 'No lending rate added yet — click Edit to add.')); return; }
+    tableWrap.appendChild(el('div', { class: 'sec-row rl-row sec-head' },
+      el('div', { class: 'sec-vals rl-vals' }, el('div', {}, 'From Date'), el('div', {}, 'Active Rate'))));
+    data.forEach((r) => {
+      tableWrap.appendChild(el('div', { class: 'sec-row rl-row' },
+        el('div', { class: 'sec-vals rl-vals' },
+          el('div', {}, dmy(r.fromDate)),
+          el('div', {}, (Number(r.rate) * 100).toFixed(2) + '%'))));
+    });
+  }
+
+  function openEditor() {
+    const work = data.map((r) => ({ ...r }));
+    if (!work.length) {
+      let seed = null;
+      if (getAnchor) { const a = getAnchor(); if (a && a.value) seed = a.value; }
+      work.push({ fromDate: seed, rate: null });
+    }
+    const entriesWrap = el('div', { class: 'sec-entries rl-entries' });
+    const entryRows = [];
+    function addEntryRow(values = {}) {
+      const dateF = dateField({ label: 'From Date', name: 'rlFromDate' });
+      if (values.fromDate) dateF.setValue(values.fromDate);
+      const rate = percentField({ label: 'Rate', name: 'rate' });
+      if (values.rate != null) rate.setValue(values.rate);
+      const rm = el('button', { type: 'button', class: 'row-del', title: 'Remove this day' }, '×');
+      const rowEl = el('div', { class: 'sec-entry rl-entry' }, dateF, rate, rm);
+      const api = { dateF, rate, rowEl };
+      rm.addEventListener('click', () => {
+        if (entryRows.length <= 1) { toast('Keep at least one day, or use Cancel.', 'warn'); return; }
+        const k = entryRows.indexOf(api); if (k >= 0) { entryRows.splice(k, 1); rowEl.remove(); }
+      });
+      entryRows.push(api);
+      entriesWrap.appendChild(rowEl);
+    }
+    work.forEach((r) => addEntryRow(r));
+
+    const addEntry = el('button', { type: 'button', class: 'sec-add-btn sec-add-entry' }, '+ Add another day');
+    addEntry.addEventListener('click', () => addEntryRow({}));
+    const cancelBtn = el('button', { type: 'button', class: 'ghost-btn modal-ghost' }, 'Cancel');
+    const saveBtn = el('button', { type: 'button', class: 'primary-btn' }, 'Save');
+
+    cancelBtn.addEventListener('click', () => confirmOverlay('Discard your changes and close this window?',
+      { yesLabel: 'Yes, discard', danger: true, onYes: closeEditor }));
+    saveBtn.addEventListener('click', () => {
+      const days = entryRows.map((r) => ({ fromDate: r.dateF.getValue(), rate: r.rate.getValue() }));
+      if (days.some((d) => !d.fromDate)) return toast('Enter the From Date for every day.', 'error');
+      if (days.some((d) => d.rate == null)) return toast('Enter a rate for every day.', 'error');
+      const anchor = getAnchor && getAnchor();
+      const mat = getMaturity && getMaturity();
+      for (const d of days) {
+        if (anchor && anchor.value && d.fromDate < anchor.value) return toast('A rate day cannot be before the disbursement date.', 'error');
+        if (mat && d.fromDate >= mat) return toast(`Each rate day must be earlier than loan maturity (${dmy(mat)}).`, 'error');
+      }
+      const seen = new Set();
+      for (const d of days) { if (seen.has(d.fromDate)) return toast('Two days share the same date — each date can appear only once.', 'error'); seen.add(d.fromDate); }
+      confirmOverlay('Save these lending rate layers?', { yesLabel: 'Yes, save', onYes: () => {
+        data = days.map((d) => ({ fromDate: d.fromDate, rate: d.rate }));
+        closeEditor(); render(); notifyChange();
+      } });
+    });
+
+    const card = el('div', { class: 'sec-edit rl-editor' },
+      el('div', { class: 'sec-edit-head' }, el('h3', {}, 'Lending Rate Layers')),
+      el('p', { class: 'help' }, 'Add each date a new lending rate takes effect (one rate per day). The earliest rate also applies from disbursement up to that day.'),
+      el('div', { class: 'sec-entry rl-entry sec-entry-head' }, el('div', {}, 'From Date'), el('div', {}, 'Rate'), el('div', {}, '')),
+      entriesWrap, addEntry,
+      el('div', { class: 'sec-edit-actions' }, cancelBtn, saveBtn));
+    openModal(card);
+    const back = document.querySelector('#modal-root .modal-backdrop'); if (back) back.onclick = null; // force Save/Cancel
+    const mc = document.getElementById('modal-card'); if (mc) mc.classList.add('modal-card--sec');
+  }
+
+  wrapper.getValue = () => data
+    .filter((r) => r.fromDate && r.rate != null)
+    .sort((a, b) => String(a.fromDate).localeCompare(String(b.fromDate)))
+    .map((r) => ({ fromDate: r.fromDate, activeRate: Number(r.rate) }));
+  wrapper.setValue = (arr) => {
+    data = (arr || []).map((item) => {
+      const d = item.fromDate ? parseDDMMMYYYY(item.fromDate) : null;
+      const iso = d ? d.toISOString().slice(0, 10) : null;
+      const rate = item.activeRate != null ? Number(item.activeRate) : (item.rate != null ? Number(item.rate) : null);
+      return { fromDate: iso, rate };
+    }).filter((r) => r.fromDate && r.rate != null);
     render();
   };
   wrapper.applyLayerRules = () => render();

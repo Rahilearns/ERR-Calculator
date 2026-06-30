@@ -1150,6 +1150,14 @@ table.schedule th {
 }
 .sec-add-btn:hover { border-color: var(--primary); color: var(--primary); }
 
+/* Lending Rate layers — read-only table + single "Edit" popup (one rate per day).
+   Reuses the Loan Security table styles; the table is display-only (no per-row actions),
+   so the value box spans the full width and shows two centered columns. */
+.rl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rl-head label { margin: 0; }
+.rl-row { grid-template-columns: 1fr; }      /* no actions column — value box fills the row */
+.rl-vals { grid-template-columns: 1fr 1fr; } /* From Date | Active Rate */
+
 /* Editor popup */
 .modal-card--sec { width: min(560px, 94vw); }
 .sec-edit-head h3 { margin: 0 0 4px; font-size: 17px; color: var(--text); }
