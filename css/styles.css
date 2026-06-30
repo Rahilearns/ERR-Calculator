@@ -1116,17 +1116,26 @@ table.schedule th {
 }
 
 /* ===== Loan Security layers — read-only table + editor popup ===== */
-.sec-table { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+/* Outlined panel for the layer sections (matches the COF upload box). */
+.layer-panel {
+  border: 1.5px dashed var(--border); border-radius: var(--radius-sm);
+  background: rgba(37, 70, 224, 0.035); padding: 16px 18px;
+}
+[data-theme="dark"] .layer-panel { background: rgba(110, 140, 255, 0.06); }
+
+.sec-table { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .sec-empty { padding: 10px 2px; }
-.sec-row {
-  display: grid; grid-template-columns: 1.1fr 1.2fr 1.3fr auto; gap: 8px; align-items: center;
-  padding: 9px 12px; background: var(--bg-elev); border: 1px solid var(--border);
+/* Row = bordered value box (centered) + Edit/Delete OUTSIDE the box. */
+.sec-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+.sec-vals {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center;
+  padding: 10px 14px; background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: var(--radius-sm); font-size: 13px;
 }
-.sec-row.sec-head { background: transparent; border: none; padding: 2px 12px; font-size: 11.5px; font-weight: 600; color: var(--text-soft); }
-.sec-num { text-align: right; font-variant-numeric: tabular-nums; }
-.sec-head div:nth-child(2), .sec-head div:nth-child(3) { text-align: right; }
-.sec-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.sec-vals > div { text-align: center; font-variant-numeric: tabular-nums; }
+.sec-row.sec-head .sec-vals { background: transparent; border-color: transparent; padding: 2px 14px; font-size: 11.5px; font-weight: 600; color: var(--text-soft); }
+.sec-acts { display: flex; gap: 6px; }
+.sec-acts-ph { visibility: hidden; }
 .sec-btn {
   padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--bg); color: var(--text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;

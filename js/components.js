@@ -1,5 +1,5 @@
 // Reusable UI component builders (returns DOM nodes)
-import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzo';
+import { attachCommaFormatter, sanitizeDecimalString, formatTwoDecimalsOnBlur } from './formatting.js?v=20260603zzp';
 
 let uid = 0;
 const nextId = () => `f${++uid}`;
@@ -864,9 +864,13 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
     data.sort((a, b) => String(a.fromDate || '').localeCompare(String(b.fromDate || '')));
     tableWrap.innerHTML = '';
     if (!data.length) { tableWrap.appendChild(el('div', { class: 'sec-empty help' }, 'No security added yet.')); return; }
+    // Header: the column labels sit over the bordered value box; a hidden actions placeholder keeps
+    // the columns aligned with the rows below (whose Edit/Delete sit OUTSIDE the bordered box).
     tableWrap.appendChild(el('div', { class: 'sec-row sec-head' },
-      el('div', {}, 'From Date'), el('div', {}, 'Total Outstanding'),
-      el('div', {}, 'Applicable Interest Rate'), el('div', {}, '')));
+      el('div', { class: 'sec-vals' }, el('div', {}, 'From Date'), el('div', {}, 'Total Outstanding'), el('div', {}, 'Applicable Interest Rate')),
+      el('div', { class: 'sec-acts sec-acts-ph' },
+        el('button', { type: 'button', class: 'sec-btn', tabindex: '-1' }, 'Edit'),
+        el('button', { type: 'button', class: 'sec-btn sec-del', tabindex: '-1' }, 'Delete'))));
     data.forEach((r, i) => {
       const editBtn = el('button', { type: 'button', class: 'sec-btn' }, 'Edit');
       editBtn.addEventListener('click', () => openEditor(i));
@@ -874,9 +878,10 @@ export function securityLayersField({ label, name, help = '', getAnchor = null, 
       delBtn.addEventListener('click', () => confirmOverlay(`Remove the security row for ${dmy(r.fromDate)}?`,
         { yesLabel: 'Yes, remove', danger: true, onYes: () => { data.splice(i, 1); render(); } }));
       tableWrap.appendChild(el('div', { class: 'sec-row' },
-        el('div', {}, dmy(r.fromDate)),
-        el('div', { class: 'sec-num' }, money2(rowTotal(r))),
-        el('div', { class: 'sec-num' }, (rowRate(r) * 100).toFixed(2) + '%'),
+        el('div', { class: 'sec-vals' },
+          el('div', {}, dmy(r.fromDate)),
+          el('div', {}, money2(rowTotal(r))),
+          el('div', {}, (rowRate(r) * 100).toFixed(2) + '%')),
         el('div', { class: 'sec-acts' }, editBtn, delBtn)));
     });
   }

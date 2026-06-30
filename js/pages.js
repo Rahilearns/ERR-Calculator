@@ -3,22 +3,22 @@ import {
   el, numberField, percentField, optionField, dateField, textField,
   monthBoxesField, layeredField, securityLayersField, toast, parseDDMMMYYYY, formatDDMMMYYYY,
   openModal, closeModal,
-} from './components.js?v=20260603zzo';
-import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzo';
+} from './components.js?v=20260603zzp';
+import { isoToDDMMMYYYY } from './formatting.js?v=20260603zzp';
 import {
   buildStructuredSchedule, buildCustomizedSchedule,
   buildRateRevisionStructured, computeMetrics,
   computeRevisionMetrics, computeRevisionCustomizedMetrics, buildCofData,
   addMonthsDue,
-} from './calculations.js?v=20260603zzo';
-import { formatMoney, formatPercent } from './formatting.js?v=20260603zzo';
-import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzo';
+} from './calculations.js?v=20260603zzp';
+import { formatMoney, formatPercent } from './formatting.js?v=20260603zzp';
+import { saveSummary, listSummaries, getMax, saveDraft, loadDraft, clearDraft } from './storage.js?v=20260603zzp';
 import {
   downloadScheduleAsExcel, downloadSampleAmortization, readUploadedSchedule,
   downloadScheduleAsWord, downloadScheduleAsPDF, downloadVerificationExcel, downloadReportPDF,
   downloadCofSample, readUploadedCof,
   downloadCustomizedRevisionSample, readCustomizedRevisionFile,
-} from './excel.js?v=20260603zzo';
+} from './excel.js?v=20260603zzp';
 
 // Loan-security model: each row is the security balance in effect from its date, at its rate
 // (a total — not an addition). The most recent layer applies until the next layer's date.
@@ -605,7 +605,6 @@ export function renderRateRevisionStructured(root) {
   const securityLayers = securityLayersField({
     label: 'Loan Security Layers',
     name: 'securityLayers',
-    help: SECURITY_LAYERS_HELP,
     getAnchor: () => ({ value: disbursementDate.getValue() }),
     getMaturity: () => maturityISO(),
   });
@@ -625,8 +624,7 @@ export function renderRateRevisionStructured(root) {
 
   // Optional free-text reference — prefixed onto every downloaded file's name for this calc.
   const referenceField = textField({
-    label: 'Add Reference', name: 'reference', placeholder: 'e.g. loan account / proposal no. (optional)',
-    help: 'Optional. Prefixed to the start of every downloaded file name (separated by an underscore).',
+    label: 'Add Reference (Optional)', name: 'reference', placeholder: 'e.g. loan account / proposal no.',
   });
 
   section.appendChild(el('div', { class: 'form-row' }, initialAmount, disbursementDate));
@@ -636,7 +634,7 @@ export function renderRateRevisionStructured(root) {
   section.appendChild(moraSection);
   section.appendChild(el('div', { class: 'form-row' }, paymentModality, tenorMonths));
   section.appendChild(el('div', { class: 'sub-card' }, rateLayers));
-  section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
+  section.appendChild(el('div', { class: 'layer-panel' }, securityLayers));
   section.appendChild(el('div', { class: 'sub-card' }, cofField));
   section.appendChild(el('div', { class: 'form-row' }, referenceField));
 
@@ -786,17 +784,15 @@ export function renderRateRevisionCustomized(root) {
   const securityLayers = securityLayersField({
     label: 'Loan Security Layers',
     name: 'securityLayers',
-    help: SECURITY_LAYERS_HELP,
     getAnchor: () => ({ value: (uploadedRows && uploadedRows[0] && uploadedRows[0].date) || null }),
     getMaturity: () => (uploadedRows && uploadedRows.length ? uploadedRows[uploadedRows.length - 1].date : null),
   });
 
-  section.appendChild(el('div', { class: 'sub-card' }, securityLayers));
+  section.appendChild(el('div', { class: 'layer-panel' }, securityLayers));
 
   // Optional free-text reference — prefixed onto every downloaded file's name for this calc.
   const referenceField = textField({
-    label: 'Add Reference', name: 'reference', placeholder: 'e.g. loan account / proposal no. (optional)',
-    help: 'Optional. Prefixed to the start of every downloaded file name (separated by an underscore).',
+    label: 'Add Reference (Optional)', name: 'reference', placeholder: 'e.g. loan account / proposal no.',
   });
   section.appendChild(el('div', { class: 'form-row' }, referenceField));
 
@@ -900,10 +896,7 @@ function cofUploadField(onParsed) {
   // Distinguished upload-zone panel (dashed border, icon badge, title + hint).
   const title = el('div', { class: 'uz-title' }, 'COF Data Upload');
   const field = el('div', { class: 'upload-zone' },
-    el('div', { class: 'uz-head' },
-      el('span', { class: 'uz-icon' }, '⬆'),
-      el('div', { class: 'uz-titles' }, title,
-        el('div', { class: 'uz-sub' }, 'Excel (.xlsx) — the filled-in COF sample workbook'))),
+    el('div', { class: 'uz-head' }, el('div', { class: 'uz-titles' }, title)),
     el('div', { class: 'uz-actions' }, uploadBtn, fileInput, status),
     el('div', { class: 'uz-sample' }, sampleLink));
   return { field, getRows: () => rows };
