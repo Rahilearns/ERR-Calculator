@@ -499,16 +499,14 @@ select.centered-input { text-align: center; text-align-last: center; }
 @media (max-width: 600px) {
   .month-boxes { grid-template-columns: repeat(3, 1fr); }
 }
-/* Moratorium box palette — soft light-blue Accrued (dark text in light mode, light text in dark
-   mode), with saturated solid Paid (green) and Capitalized (purple) on white text. */
+/* Moratorium box palette — identical in light and dark mode (one colour per status, deliberately
+   not theme-switched): soft light-blue Accrued on near-black text, solid blue Paid and deep-brown
+   Capitalized on white text. */
 :root {
-  --mb-accrue-bg: #eaf2ff; --mb-accrue-bd: #c9dcf7; --mb-accrue-text: #1a1a1a;
-  --mb-paid-bg:   #3a25f8; --mb-paid-bd:   #2e1ec6;
-  --mb-cap-bg:    #9223fb; --mb-cap-bd:    #751cc9;
+  --mb-accrue-bg: #eaf2ff; --mb-accrue-bd: #c9dcf7; --mb-accrue-text: #262626;
+  --mb-paid-bg:   #1b29d8; --mb-paid-bd:   #1521ad;
+  --mb-cap-bg:    #4a302f; --mb-cap-bd:    #3a2625;
   --mb-text: #ffffff;
-}
-[data-theme="dark"] {
-  --mb-accrue-bg: #243a57; --mb-accrue-bd: #34507a; --mb-accrue-text: #f5f5f5;
 }
 .month-box {
   border: 1px solid var(--mb-accrue-bd);
@@ -522,9 +520,9 @@ select.centered-input { text-align: center; text-align-last: center; }
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, filter 0.15s ease;
 }
 .month-box:hover { border-color: var(--primary); filter: brightness(1.03); }
-/* One click = Paid (green) */
+/* One click = Paid (blue) */
 .month-box.paid { border-color: var(--mb-paid-bd); background: var(--mb-paid-bg); color: var(--mb-text); }
-/* Two clicks = Capitalized (purple) */
+/* Two clicks = Capitalized (brown) */
 .month-box.capitalized { border-color: var(--mb-cap-bd); background: var(--mb-cap-bg); color: var(--mb-text); }
 .month-box .mb-num { font-weight: 700; font-size: 14px; color: inherit; }
 .month-box .mb-lbl { font-size: 10px; color: inherit; opacity: 0.85; letter-spacing: 0.2px; }
